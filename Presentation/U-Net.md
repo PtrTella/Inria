@@ -13,7 +13,7 @@ In diffusion models, the core neural network is a **U-Net**. It's used to **pred
 
 ---
 
-![](u-net-architecture.png)
+![](images/u-net-architecture.png)
 
 ---
 
