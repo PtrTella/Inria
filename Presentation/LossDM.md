@@ -102,7 +102,7 @@ $$L_T = D_{\text{KL}}(q(x_T|x_0) \| p(x_T))$$
 
 Quantify how much the final noise $x_T$ (resulting from the forward process) resembles the standard Gaussian noise distribution  $p(x_T)$.
 
-In practice, since the **forward process is very long** [small noise additions $\beta_t$], at the end, $q(x_T|x_0)$ becomes **almost identical** to $p(x_T)$. This KL divergence becomes **very small** and can be **ignored** (or computed once and treated as constant).
+In practice, since the **forward process is very long** (small noise additions $\beta_t$), at the end, $q(x_T|x_0)$ becomes **almost identical** to $p(x_T)$. This KL divergence becomes **very small** and can be **ignored** (or computed once and treated as constant).
 
 ---
 
@@ -122,109 +122,165 @@ $$
 
 
 > ⚠️ The reconstruction term $L_0$ is not used in the standard training loss of Ho et al. (2020). It is replaced by a simpler loss, $L_{\text{simple}}$, which trains the model to predict the noise added to the data. This approach has shown better performance in terms of the visual quality of the generated samples.
----
-
-## Second Term - Transition KLs
-$$\sum_{t=2}^T D_{\text{KL}}(q(x_{t-1}|x_t, x_0) \, \|\, p_\theta(x_{t-1}|x_t))$$
-
-This term measures **how well** the model $p_\theta(x_{t-1}|x_t)$ approximates the **true posterior** $q(x_{t-1}|x_t, x_0)$.
-
->💡 During the forward process, we progressively noise $x_0$ to obtain $x_t$ and now the model must **denoise $x_t$ back toward $x_0$** step by step. At each step $t$, the model needs to predict the correct distribution of $x_{t-1}$ given $x_t$.
 
 ---
 
-#### ⚫ Deriving the Posterior $q(x_{t-1}|x_t,x_0)$
+## 🔷 Second Term — Transition KLs
 
-Since $x_t$and $x_{t-1}$are jointly Gaussian (as linear transformations of $x_0$with added Gaussian noise), the posterior $q(x_{t-1} | x_t, x_0)$is itself Gaussian:
-
-$$
-q(x_{t-1} | x_t, x_0) = \mathcal{N}\left(\tilde{\mu}_t(x_t, x_0), \tilde{\beta}_t I\right)
-$$
-
-with:
-
-- **Mean**: a specific linear combination of $x_0$and $x_t$,
-$$
-\tilde{\mu}_t(x_t,x_0) = \frac{\sqrt{\bar{\alpha}_{t-1}} \beta_t}{1-\bar{\alpha}_t} x_0 + \frac{\sqrt{\alpha_t} (1-\bar{\alpha}_{t-1})}{1-\bar{\alpha}_t} x_t 
-$$
-- **Variance**: a function of the variances introduced by the noise schedule. 
+We consider the term:
 
 $$
-\tilde{\beta}_t = \frac{1-\bar{\alpha}_{t-1}}{1-\bar{\alpha}_t} \beta_t
+\sum_{t=2}^T D_{\text{KL}}\left(q(x_{t-1} \mid x_t, x_0) \, \| \, p_\theta(x_{t-1} \mid x_t)\right)
 $$
+
+This measures how well the learned reverse process $p_\theta(x_{t-1} \mid x_t)$ approximates the **true posterior** distribution over the intermediate state $x_{t-1}$, given $x_t$ and the original data $x_0$. This posterior is analytically tractable due to the Gaussianity of the forward process.
+
+> 💡 In the forward (diffusion) process, the model gradually corrupts a data point $x_0$ into noisy versions $x_t$. The reverse process aims to denoise step-by-step, learning $p_\theta(x_{t-1} \mid x_t)$. The KL terms penalize deviation from the true (known) reverse posterior at each step.
 
 ---
 
-#### ⚫ KL formula between two Gaussians:
+### **Computing the True Posterior $q(x_{t-1} \mid x_t, x_0)$**
 
-Given the true posterior  and the model’s reverse distribution as two **Gaussian** the **KL Divergence** is calulated as:
-$$
-D_{\text{KL}}(q \, \| \, p) = \frac{1}{2}\left( \log\frac{\sigma_\theta^2}{\tilde{\beta}_t} + \frac{\tilde{\beta}_t}{\sigma_\theta^2} + \frac{(\tilde{\mu}_t(x_t, x_0)- \mu_\theta(x_t, t))^2}{\tilde{\beta}_t} - 1 \right)
-$$
-
-If we **fixe** he variance $\sigma_\theta^2 = \tilde{\beta}_t$, the KL divergence **greatly simplifies**:  
-**it becomes proportional to the squared distance between $\tilde{\mu}_t$ and $\mu_\theta$**.
-
+Given that all transitions in the forward process are Gaussian, and that $x_t$ is a linear transformation of $x_0$ plus Gaussian noise, the posterior is also Gaussian:
 
 $$
-D_{\text{KL}}(q \, \| \, p) = \frac{1}{2} \left( \frac{\|\tilde{\mu}_t(x_t, x_0) - \mu_\theta(x_t, t)\|^2}{\tilde{\beta}_t} \right)
-$$
-
----
-
-# 💠 Loss Formula
-
-$$
-\mathcal{L} = \mathbb{E}_q \left[ \|\tilde{\mu}_t(x_t, x_0) - \mu_\theta(x_t, t)\|^2 \right]
-$$
-Instead of predicting directly the means, the paper **Ho et al. (2020)** notices that it is **even easier to predict the noise** $\epsilon$. From the forward process:
-
-$$
-x_t = \sqrt{\bar{\alpha}_t} x_0 + \sqrt{1-\bar{\alpha}_t} \epsilon
-\quad \rightarrow \quad x_0 = \frac{1}{\sqrt{\bar{\alpha}_t}}\left( x_t - \sqrt{1-\bar{\alpha}_t} \epsilon \right)
-\quad,\quad \epsilon \sim \mathcal{N}(0,I)
-$$
-We can rewrite **means** involving $x_t$ and $\epsilon$
-$$
-\tilde{\mu}_t(x_t, \epsilon) = \text{(coefficient)} \times x_t + \text{(coefficient)} \times \epsilon
-$$
-
-
-$$
-\mu_\theta(x_t, t) = \text{(coefficient)} \times x_t + \text{(coefficient)} \times \epsilon_\theta(x_t, t)
-$$
-
-When subtracting $\tilde{\mu}t - \mu\theta$ only the terms involving $\epsilon$ and $\epsilon_\theta$ remain:P
-
-$$
-\tilde{\mu}_t(x_t, x_0) - \mu_\theta(x_t, t) \quad \propto \quad \epsilon - \epsilon_\theta(x_t, t)
-$$
-
-
----
-
-# 💠 Simple Loss Formula
-
-Minimizing the posterior mean error is equivalent to minimizing the noise prediction error:
-
-$$
-\mathcal{L}_{\text{simple}} = \mathbb{E}_{x_0, t, \epsilon} \left[ \| \epsilon - \epsilon_\theta(x_t, t) \|^2 \right]
+q(x_{t-1} \mid x_t, x_0) = \mathcal{N}\left(\tilde{\mu}_t(x_t, x_0), \tilde{\beta}_t I\right)
 $$
 
 Where:
-- $x_0$ is sampled from the dataset,
-- $t$ is uniformly sampled from $\{1, ..., T\}$,
-- $\epsilon$ is sampled from $\mathcal{N}(0,I)$,
-- $x_t$ is generated via:
+
+* The **posterior mean** is:
 
 $$
-x_t = \sqrt{\bar{\alpha}_t} x_0 + \sqrt{1-\bar{\alpha}_t} \epsilon
+\tilde{\mu}_t(x_t, x_0) = 
+\frac{\sqrt{\bar{\alpha}_{t-1}} \beta_t}{1 - \bar{\alpha}_t} x_0 
++ \frac{\sqrt{\alpha_t} (1 - \bar{\alpha}_{t-1})}{1 - \bar{\alpha}_t} x_t
 $$
 
-## And the model $\epsilon_\theta(x_t, t)$ is trained to **predict the true noise $\epsilon$**
+* The **posterior variance** is:
 
+$$
+\tilde{\beta}_t = \frac{1 - \bar{\alpha}_{t-1}}{1 - \bar{\alpha}_t} \beta_t
+$$
 
 ---
+
+### **KL Between Gaussians**
+
+The KL divergence between the posterior and the model prediction — both Gaussians with diagonal covariance — is:
+
+$$
+D_{\text{KL}}(q \, \| \, p) = \frac{1}{2}\left[
+\log \frac{\sigma_\theta^2}{\tilde{\beta}_t} +
+\frac{\tilde{\beta}_t}{\sigma_\theta^2} +
+\frac{\left\| \tilde{\mu}_t(x_t, x_0) - \mu_\theta(x_t, t) \right\|^2}{\sigma_\theta^2}
+- 1
+\right]
+$$
+
+Where:
+
+* $\tilde{\mu}_t(x_t, x_0)$ is the posterior mean,
+* $\mu_\theta(x_t, t)$ is the model’s predicted mean,
+* $\sigma_\theta^2$ is the variance of the reverse model, which is either fixed or learned.
+
+---
+
+### **Simplification: Fixing the Variance**
+
+Following *Ho et al.*'s approach, if we **fix the model variance** to match the posterior, $\sigma_\theta^2 = \tilde{\beta}_t$, then:
+
+* The log-ratio and variance terms cancel or simplify,
+* The KL becomes proportional to the squared error between predicted and true means:
+
+$$
+D_{\text{KL}}(q \, \| \, p) = \frac{1}{2 \tilde{\beta}_t}
+\left\| \tilde{\mu}_t(x_t, x_0) - \mu_\theta(x_t, t) \right\|^2
+$$
+
+---
+
+## 💠 Mean Prediction Loss
+
+This suggests the following training objective:
+
+$$
+\mathcal{L}_{\text{mean}} = \mathbb{E}_q \left[
+\left\| \tilde{\mu}_t(x_t, x_0) - \mu_\theta(x_t, t) \right\|^2
+\right]
+$$
+
+However, *Ho et al.* propose a further simplification — rather than predicting $\mu_\theta$, they predict the **original noise** $\epsilon$ used to generate $x_t$.
+
+---
+
+### 🔁 Rewriting the Forward Process
+
+From the forward process:
+
+$$
+x_t = \sqrt{\bar{\alpha}_t} x_0 + \sqrt{1 - \bar{\alpha}_t} \epsilon, \quad \epsilon \sim \mathcal{N}(0, I)
+$$
+
+Solving for $x_0$:
+
+$$
+x_0 = \frac{1}{\sqrt{\bar{\alpha}_t}} \left( x_t - \sqrt{1 - \bar{\alpha}_t} \epsilon \right)
+$$
+
+Plugging this into $\tilde{\mu}_t(x_t, x_0)$, both the posterior and model means become linear combinations of $x_t$ and $\epsilon$ or $\epsilon_\theta$.
+
+---
+
+### ⚡ Subtracting Posterior and Model Means
+
+If we write both means:
+
+$$
+\tilde{\mu}_t(x_t, \epsilon) = A_t x_t + B_t \epsilon \\
+\mu_\theta(x_t, t) = A_t x_t + B_t \epsilon_\theta(x_t, t)
+$$
+
+Then:
+
+$$
+\tilde{\mu}_t(x_t, x_0) - \mu_\theta(x_t, t) = B_t (\epsilon - \epsilon_\theta(x_t, t))
+$$
+
+So minimizing the KL is equivalent to minimizing the error in noise prediction.
+
+---
+
+## 💠 Final Training Objective
+
+This yields the simplified loss:
+
+$$
+\mathcal{L}_{\text{simple}} =
+\mathbb{E}_{x_0, t, \epsilon} \left[
+\left\| \epsilon - \epsilon_\theta(x_t, t) \right\|^2
+\right]
+$$
+
+Where:
+
+* $x_0 \sim \text{data}$,
+* $t \sim \text{Uniform}(1, T)$,
+* $\epsilon \sim \mathcal{N}(0, I)$,
+* $x_t = \sqrt{\bar{\alpha}_t} x_0 + \sqrt{1 - \bar{\alpha}_t} \epsilon$
+
+---
+
+### ✅ Interpretation
+
+The model is trained to predict the exact noise $\epsilon$ used in the forward process — this is a **simple, efficient, and empirically effective** surrogate for minimizing the full variational bound.
+
+It also leads to **clean analytical properties**, enabling high-quality sampling with relatively few steps.
+
+---
+
+Let me know if you'd like this cleaned into a full PDF section or adapted to a presentation!
+
 
 ## References
 
