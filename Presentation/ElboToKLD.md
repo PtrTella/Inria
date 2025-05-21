@@ -59,6 +59,8 @@ $$
 p_\theta(x_0 | x_1) = q(x_1 | x_0) \frac{\pi(x_0)}{\pi(x_1)}
 $$
 
+> Da controllare perche assunzione e che pi sia uguale senno che senso ha? comunque idea di base e che allo step 1 il rumore aggiunto e trascurabile.
+
 where $\pi(x_0)$ and $\pi(x_1)$ are reference distributions in the forward process. This assumption allows the cancellation of the initial term, so the summation in the integral starts from $t = 2$:
 
 $$

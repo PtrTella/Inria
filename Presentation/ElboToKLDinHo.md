@@ -97,7 +97,7 @@ $$
 
 ---
 
-### Final Result
+### **Final Result and KL Divergence rearrangement**
 
 After simplifications and cancellation of shared log-terms, we obtain:
 
@@ -109,11 +109,8 @@ $$
 \right]
 $$
 
-This is Equation (21) — all terms now have interpretable structure (posterior over model prediction), and are ready to be expressed as KL divergences in the next step (Eq. 22).
+We can now express the KL divergence between the true forward process and the learned reverse process:
 
----
-
-### **Final KL Divergence Formulation**
 $$
 \mathcal{K} = \mathbb{E}_{q(x_{0:T})} \left[
   D_{KL}(q(x_T | x_0) || p(x_T))
@@ -121,5 +118,3 @@ $$
   - \log p_\theta(x_0 | x_1)
 \right]
 $$
-
-This is the final form of the KL divergence, which can be interpreted as a sum of KL divergences between the true forward process and the learned reverse process, plus a term for the initial state. This formulation is crucial for understanding how diffusion models learn to generate data by reversing the diffusion process.
