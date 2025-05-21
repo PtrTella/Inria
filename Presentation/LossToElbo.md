@@ -10,7 +10,7 @@ This derivation aims to express the log-likelihood of a generative model via non
 
 ---
 
-## 1. Objective: Log-Likelihood of the Data
+## **Objective: Log-Likelihood of the Data**
 
 Given a data distribution $q(x_0)$ (typically an empirical distribution from the dataset), the goal is to maximize the expected log-likelihood under a generative model $p_\theta(x_0)$:
 
@@ -20,7 +20,7 @@ $$
 
 ---
 
-## 2. Intractability of the Marginal Likelihood
+## **Intractability of the Marginal Likelihood**
 
 The model defines a joint distribution over a trajectory $x_{0:T} = (x_0, x_1, \dots, x_T)$. The marginal likelihood of $x_0$ is:
 
@@ -40,20 +40,22 @@ Here:
 
 ---
 
-## 3. Importance Sampling via a Forward Process
+## **Importance Sampling via a Forward Process**
 
 The marginal likelihood $p_\theta(x_0)$ is intractable due to the high-dimensional integral over all possible trajectories $x_{1:T}$. To estimate it, we apply **importance sampling**, a technique that lets us rewrite an expectation over a difficult distribution $p$ using samples from a simpler, tractable distribution $q$.
 
 We define a tractable **forward (proposal) process** $q(x_{1:T} \mid x_0)$, and use it to rewrite:
 
 $$
-p_\theta(x_0) = \int q(x_{1:T} \mid x_0) \cdot \frac{p(x_T) \prod_{t=1}^{T} p_\theta(x_{t-1} \mid x_t)}{q(x_{1:T} \mid x_0)} \, dx_{1:T}
+p_\theta(x_0) = \int q(x_{1:T} \mid x_0) \cdot \frac{p_\theta(x_{0:T}) }{q(x_{1:T} \mid x_0)} \, dx_{1:T}
 $$
 
 Taking the expectation over $q$:
 
 $$
-p_\theta(x_0) = \mathbb{E}_{q(x_{1:T} \mid x_0)} \left[ \frac{p(x_T) \prod_{t=1}^{T} p_\theta(x_{t-1} \mid x_t)}{q(x_{1:T} \mid x_0)} \right]
+p_\theta(x_0) 
+= \mathbb{E}_{q(x_{1:T} \mid x_0)} \left[ \frac{p_\theta(x_{0:T}) }{q(x_{1:T} \mid x_0)} \right] 
+= \mathbb{E}_{q(x_{1:T} \mid x_0)} \left[ \frac{p(x_T) \prod_{t=1}^{T} p_\theta(x_{t-1} \mid x_t)}{q(x_{1:T} \mid x_0)} \right] 
 $$
 
 ---
@@ -67,37 +69,40 @@ Importance sampling allows us to evaluate expectations or integrals under $p$ us
 
 ---
 
-## 4. Lower Bound via Jensen’s Inequality
+## **Lower Bound via Jensen’s Inequality**
 
 Now plug this into the expected log-likelihood, importance sampling on $p_\theta(x_0)$:
 
 $$
 \mathcal{L_\theta} = \mathbb{E}_{q(x_0)} \left[ \log p_\theta(x_0) \right]
-= \mathbb{E}_{q(x_0)} \left[ \log \mathbb{E}_{q(x_{1:T} \mid x_0)} \left[ \frac{p(x_T) \prod_{t=1}^{T} p_\theta(x_{t-1} \mid x_t)}{q(x_{1:T} \mid x_0)} \right] \right]
+= \mathbb{E}_{q(x_0)} \left[ \log \mathbb{E}_{q(x_{1:T} \mid x_0)} \left[ \frac{p_\theta(x_{0:T}) }{q(x_{1:T} \mid x_0)} \right] \right]
 $$
 
 Apply **Jensen's inequality**
 
-$$\mathcal{L_\theta} \geq \mathcal{K} =  \mathbb{E}_{q(x_0)} \mathbb{E}_{q(x_{1:T} \mid x_0)} \left[ \log \left( \frac{p(x_T) \prod_{t=1}^{T} p_\theta(x_{t-1} \mid x_t)}{q(x_{1:T} \mid x_0)} \right) \right]
+$$\mathcal{L_\theta} \geq \mathcal{K} =  \mathbb{E}_{q(x_0)} \mathbb{E}_{q(x_{1:T} \mid x_0)} \left[ \log \left( \frac{p_\theta(x_{0:T}) }{q(x_{1:T} \mid x_0)} \right) \right]
 $$
 
 ---
 
-## 5. Defining the ELBO (Evidence Lower Bound)
+## **Defining the ELBO (Evidence Lower Bound)**
 
-We define the **joint forward distribution** (conditional probablity):
-
-$$
-q(x_{0:T}) = q(x_0) q(x_{1:T} \mid x_0)
-$$
+We define the **joint forward distribution** : $q(x_{0:T}) = q(x_0) q(x_{1:T} \mid x_0)$
 
 Thus, the lower bound becomes:
 
 $$
-\mathcal{L_\theta} \geq \mathbb{E}_{q(x_{0:T})} \left[ \log \left( \frac{p(x_T) \prod_{t=1}^{T} p_\theta(x_{t-1} \mid x_t)}{q(x_{1:T} \mid x_0)} \right) \right]
+\mathcal{L_\theta} \geq \mathcal{K} = \mathbb{E}_{q(x_{0:T})} \left[ \log \left( \frac{p(x_T) \prod_{t=1}^{T} p_\theta(x_{t-1} \mid x_t)}{q(x_{1:T} \mid x_0)} \right) \right]
 $$
 
-This expression is the **Evidence Lower Bound (ELBO)** that we optimize during training.
+Expanding the expectation:
+$$
+\mathcal{L_\theta} \geq \mathcal{K} = \int q(x_{0:T}) \log \left( \frac{p(x_T) \prod_{t=1}^{T} p_\theta(x_{t-1} \mid x_t)}{q(x_{1:T} \mid x_0)} \right) dx_{0:T}
+$$
+
+---
+
+![image](./images/Derivation.png)
 
 ---
 
@@ -111,3 +116,4 @@ This expression is the **Evidence Lower Bound (ELBO)** that we optimize during t
 - The ELBO allows gradient-based optimization even though $p_\theta(x_0)$ is intractable.
 
 This derivation bridges machine learning and statistical physics, treating inference as evaluation over **nonequilibrium trajectories** and learning as minimizing their relative cost between generative and inference processes.
+
