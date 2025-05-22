@@ -97,6 +97,7 @@ $$
 $$
 
 ---
+
 ## First Term - Prior KL
 $$L_T = D_{\text{KL}}(q(x_T|x_0) \| p(x_T))$$
 
@@ -125,7 +126,7 @@ $$
 
 ---
 
-## 🔷 Second Term — Transition KLs
+## Second Term — Transition KLs
 
 We consider the term:
 
@@ -139,7 +140,7 @@ This measures how well the learned reverse process $p_\theta(x_{t-1} \mid x_t)$ 
 
 ---
 
-### **Computing the True Posterior $q(x_{t-1} \mid x_t, x_0)$**
+## **Computing the True Posterior $q(x_{t-1} \mid x_t, x_0)$**
 
 Given that all transitions in the forward process are Gaussian, and that $x_t$ is a linear transformation of $x_0$ plus Gaussian noise, the posterior is also Gaussian:
 
@@ -165,7 +166,7 @@ $$
 
 ---
 
-### **KL Between Gaussians**
+## **KL Between Gaussians**
 
 The KL divergence between the posterior and the model prediction — both Gaussians with diagonal covariance — is:
 
@@ -186,7 +187,7 @@ Where:
 
 ---
 
-### **Simplification: Fixing the Variance**
+## **Simplification: Fixing the Variance**
 
 Following *Ho et al.*'s approach, if we **fix the model variance** to match the posterior, $\sigma_\theta^2 = \tilde{\beta}_t$, then:
 
