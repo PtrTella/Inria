@@ -2,91 +2,112 @@
 marp: true
 math: mathjax
 ---
+# Deriving the Objective Function from  
 
+**Deep Unsupervised Learning using Nonequilibrium Thermodynamics** and **Denoising Diffusion Probabilistic Models**
 
-# From Likelihood to MSE Loss in Diffusion Models
-
----
-
-# 💠 Goal of training
-
-The goal in training diffusion models is to **maximize the likelihood** of real data samples $x_0$:
-
-$$
-\log p_\theta(x_0)
-$$
-
-where:
-- $p_\theta$ is the **model distribution**,
-- $\theta$ are the **parameters** of the neural network.
-
+This derivation aims to express the log-likelihood of a generative model via nonequilibrium thermodynamic principles and estimate it using importance sampling over stochastic trajectories.
 
 ---
 
-Computing the integral is **intractable** because $p_\theta(x_0)$ is **marginalized** over many latent variables:
+## **Objective: Log-Likelihood of the Data**
+
+Given a data distribution $q(x_0)$ (typically an empirical distribution from the dataset), the goal is to maximize the expected log-likelihood under a generative model $p_\theta(x_0)$:
 
 $$
+\mathcal{L_\theta} = \mathbb{E}_{q(x_0)} \left[ \log p_\theta(x_0) \right]
+$$
+
+---
+
+## **Intractability of the Marginal Likelihood**
+
+The model defines a joint distribution over a trajectory $x_{0:T} = (x_0, x_1, \dots, x_T)$. The marginal likelihood of $x_0$ is:
+
+$$\
 p_\theta(x_0) = \int p_\theta(x_{0:T}) \, dx_{1:T}
 $$
-- $x_1, ..., x_T$ are intermediate **noised versions** of the data.
-- $p_\theta(x_{0:T})$ is the **joint reverse process**:
+
+where the joint is decomposed as a **reverse process**:
 
 $$
-p_\theta(x_{0:T}) = p(x_T) \prod_{t=1}^T p_\theta(x_{t-1} | x_t)
+p_\theta(x_{0:T}) = p(x_T) \prod_{t=1}^{T} p_\theta(x_{t-1} \mid x_t)
 $$
-- $p(x_T)$ = simple Gaussian prior (pure noise),
-- $p_\theta(x_{t-1}|x_t)$ = learned reverse transitions.
+
+Here:
+- $p(x_T)$ is a simple prior (e.g., standard Gaussian),
+- $p_\theta(x_{t-1} \mid x_t)$ is the learned generative model (parameterized by a neural network).
 
 ---
 
-# 💠 Introduce a variational distribution $q(x_{1:T}|x_0)$
+## **Importance Sampling via a Forward Process**
 
-We introduce a **known** forward process $q$, which is a **fixed**, **predefined** noising process, and is simple to sample from and compute. At each step, we add small Gaussian noise.
+The marginal likelihood $p_\theta(x_0)$ is intractable due to the high-dimensional integral over all possible trajectories $x_{1:T}$. To estimate it, we apply **importance sampling**, a technique that lets us rewrite an expectation over a difficult distribution $p$ using samples from a simpler, tractable distribution $q$.
 
-### Forward process:
-
-$$
-q(x_{1:T} | x_0) = \prod_{t=1}^T q(x_t | x_{t-1})
-$$
-
-where:
+We define a tractable **forward (proposal) process** $q(x_{1:T} \mid x_0)$, and use it to rewrite:
 
 $$
-q(x_t|x_{t-1}) = \mathcal{N}\left( \sqrt{1-\beta_t} x_{t-1}, \beta_t I \right)
+p_\theta(x_0) = \int q(x_{1:T} \mid x_0) \cdot \frac{p_\theta(x_{0:T}) }{q(x_{1:T} \mid x_0)} \, dx_{1:T}
 $$
 
-
-
----
-
-# 💠 Apply Variational Inference (ELBO)
-
-We write:
+Taking the expectation over $q$:
 
 $$
-\log p_\theta(x_0) = \log \int \textcolor{blue}{q(x_{1:T}|x_0)} \frac{p_\theta(x_{0:T})}{\textcolor{blue}{q(x_{1:T}|x_0)} } dx_{1:T} = \log \mathbb{E}_{q(x_{1:T}|x_0)}\left[ \frac{p_\theta(x_{0:T})}{q(x_{1:T}|x_0)} \right]
-$$
-
-Applying **Jensen's inequality**:
-
-$$
-\log p_\theta(x_0) \geq \mathbb{E}_{q(x_{1:T}|x_0)} \left[ \log \frac{p_\theta(x_{0:T})}{q(x_{1:T}|x_0)} \right]
-$$
-Define it as the **Evidences Lower Bound**
-$$
-\mathcal{L}_{\text{vlb}} = \mathbb{E}_{q(x_{1:T}|x_0)}\left[\log p_\theta(x_{0:T}) - \log q(x_{1:T}|x_0)\right]
+p_\theta(x_0) 
+= \mathbb{E}_{q(x_{1:T} \mid x_0)} \left[ \frac{p_\theta(x_{0:T}) }{q(x_{1:T} \mid x_0)} \right] 
+= \mathbb{E}_{q(x_{1:T} \mid x_0)} \left[ \frac{p(x_T) \prod_{t=1}^{T} p_\theta(x_{t-1} \mid x_t)}{\prod_{t=1}^T q(x_t | x_{t-1})} \right] 
 $$
 
 ---
-# 💠 Expand **$p_\theta$** and **$q$** and rearranging terms
 
+### Intuition
+
+- $p(x_T) \prod p_\theta(x_{t-1} \mid x_t)$ is the **target distribution**, representing the reverse generative process from noise to data.
+- $q(x_{1:T} \mid x_0)$ is the **proposal distribution**, a forward process (e.g. a noising or diffusion process) that we can sample from easily.
+
+Importance sampling allows us to evaluate expectations or integrals under $p$ using samples from $q$, correcting for the mismatch via the ratio $\frac{p}{q}$. This is especially useful when sampling directly from $p$ is hard or intractable, as is the case here.
+
+---
+
+## **Lower Bound via Jensen’s Inequality**
+
+Now plug this into the expected log-likelihood, importance sampling on $p_\theta(x_0)$:
 
 $$
-\mathcal{L}_{\text{vlb}} = \mathbb{E}_q \left[ \log p(x_T) + \sum_{t=1}^T \log p_\theta(x_{t-1}|x_t) - \sum_{t=1}^T \log q(x_t|x_{t-1}) \right]
+\mathcal{L_\theta} = \mathbb{E}_{q(x_0)} \left[ \log p_\theta(x_0) \right]
+= \mathbb{E}_{q(x_0)} \left[ \log \mathbb{E}_{q(x_{1:T} \mid x_0)} \left[ \frac{p_\theta(x_{0:T}) }{q(x_{1:T} \mid x_0)} \right] \right]
 $$
 
+Apply **Jensen's inequality**
 
-rearrange this expression by separate the terms involving $t=T$ (for $x_T$) and write **KL divergences** between the "true" forward conditionals and the learned reverse conditionals.
+$$\mathcal{L_\theta} \geq \mathcal{K} =  \mathbb{E}_{q(x_0)} \mathbb{E}_{q(x_{1:T} \mid x_0)} \left[ \log \left( \frac{p_\theta(x_{0:T}) }{q(x_{1:T} \mid x_0)} \right) \right]
+$$
+
+---
+
+## **Defining the ELBO (Evidence Lower Bound)**
+
+We define the **joint forward distribution** : $q(x_{0:T}) = q(x_0) q(x_{1:T} \mid x_0)$
+
+Thus, the lower bound becomes:
+
+$$
+\mathcal{L_\theta} \geq \mathcal{K} = \mathbb{E}_{q(x_{0:T})} \left[ \log \left( \frac{p(x_T) \prod_{t=1}^{T} p_\theta(x_{t-1} \mid x_t)}{q(x_{1:T} \mid x_0)} \right) \right]
+$$
+
+Expanding the expectation:
+$$
+\mathcal{L_\theta} \geq \mathcal{K} = \int q(x_{0:T}) \log \left( \frac{p(x_T) \prod_{t=1}^{T} p_\theta(x_{t-1} \mid x_t)}{q(x_{1:T} \mid x_0)} \right) dx_{0:T}
+$$
+
+---
+
+![image](./images/Derivation.png)
+
+---
+
+# 💠 KL Divergence formula
+We obtain the following expression based on [Ho et al. 2020](./ElboToKLDinHO.html) derivation, but similarly the original computation from [Sohl-Dickstein et al. 2015](./ElboToKLD.html) leads to the similar results.
 
 $$
 \mathcal{L}_{\text{vlb}} = \mathbb{E}_q \left[
@@ -135,8 +156,6 @@ $$
 $$
 
 This measures how well the learned reverse process $p_\theta(x_{t-1} \mid x_t)$ approximates the **true posterior** distribution over the intermediate state $x_{t-1}$, given $x_t$ and the original data $x_0$. This posterior is analytically tractable due to the Gaussianity of the forward process.
-
-> 💡 In the forward (diffusion) process, the model gradually corrupts a data point $x_0$ into noisy versions $x_t$. The reverse process aims to denoise step-by-step, learning $p_\theta(x_{t-1} \mid x_t)$. The KL terms penalize deviation from the true (known) reverse posterior at each step.
 
 ---
 

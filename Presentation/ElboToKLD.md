@@ -45,7 +45,7 @@ $$
 This is where **entropy** is introduced, and represents the **uncertainty** of the final diffused state in the forward process.
 
 $$
-\int q(x_T) \log p(x_T) \, dx_T = -H(p(x_T))
+\int q(x_T) \log p(x_T) \, dx_T = -H_p(x_T)
 $$
 
 ---
@@ -59,12 +59,10 @@ $$
 p_\theta(x_0 | x_1) = q(x_1 | x_0) \frac{\pi(x_0)}{\pi(x_1)}
 $$
 
-> Da controllare perche assunzione e che pi sia uguale senno che senso ha? comunque idea di base e che allo step 1 il rumore aggiunto e trascurabile.
-
 where $\pi(x_0)$ and $\pi(x_1)$ are reference distributions in the forward process. This assumption allows the cancellation of the initial term, so the summation in the integral starts from $t = 2$:
 
 $$
-K = \sum_{t=2}^T \int dx_{0:T} \, q(x_{0:T}) \log \left(\frac{p_\theta(x_{t-1} | x_t)}{q(x_t | x_{t-1})}\right) - H(p(x_T))
+K = \sum_{t=2}^T \int dx_{0:T} \, q(x_{0:T}) \log \left(\frac{p_\theta(x_{t-1} | x_t)}{q(x_t | x_{t-1})}\right) - H_p(x_T)
 $$
 
 ---

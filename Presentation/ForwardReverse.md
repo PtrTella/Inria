@@ -8,7 +8,7 @@ Diffusion models, as introduced by Sohl-Dickstein et al. (2015) and further deve
 
 ---
 
-## Forward Process (Diffusion Process)
+## **Forward Process (Diffusion Process)**
 
 The forward process is a **Markovian noising process** that incrementally adds noise to a data sample $x_0$ over a series of $T$ timesteps, transforming it into a purely noisy distribution $x_T$. The intuition behind this process is to gradually corrupt the data distribution until it approximates a simple distribution, typically an **isotropic Gaussian**.
 
@@ -50,7 +50,7 @@ This product notation represents the **cumulative decay** of the original data s
 
 ---
 
-## Reverse Process (Generative Process)
+## **Reverse Process (Generative Process)**
 
 The reverse process is also a **Markov Chain**. This is the reverse of the forward noising process and is modeled as:
 
@@ -70,7 +70,7 @@ where:
 
 ---
 
-### Mean Estimation:
+### **Mean Estimation**
 
 Ho et al. (2020) proposed parameterizing the mean as:
 

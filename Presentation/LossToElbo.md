@@ -100,6 +100,9 @@ $$
 \mathcal{L_\theta} \geq \mathcal{K} = \int q(x_{0:T}) \log \left( \frac{p(x_T) \prod_{t=1}^{T} p_\theta(x_{t-1} \mid x_t)}{q(x_{1:T} \mid x_0)} \right) dx_{0:T}
 $$
 
+Next steps will follow two approaches: [Ho et al. 2020](./ElboToKLDinHO.md) and [Sohl-Dickstein et al. 2015](./ElboToKLD.md).
+
+
 ---
 
 ![image](./images/Derivation.png)
