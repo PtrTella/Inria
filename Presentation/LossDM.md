@@ -234,7 +234,7 @@ However, *Ho et al.* propose a further simplification — rather than predicting
 
 ---
 
-### 🔁 Rewriting the Forward Process
+### **Rewriting the Forward Process**
 
 From the forward process:
 
@@ -252,7 +252,7 @@ Plugging this into $\tilde{\mu}_t(x_t, x_0)$, both the posterior and model means
 
 ---
 
-### ⚡ Subtracting Posterior and Model Means
+### **Subtracting Posterior and Model Means**
 
 If we write both means:
 
@@ -289,18 +289,8 @@ Where:
 * $\epsilon \sim \mathcal{N}(0, I)$,
 * $x_t = \sqrt{\bar{\alpha}_t} x_0 + \sqrt{1 - \bar{\alpha}_t} \epsilon$
 
----
-
-### ✅ Interpretation
-
-The model is trained to predict the exact noise $\epsilon$ used in the forward process — this is a **simple, efficient, and empirically effective** surrogate for minimizing the full variational bound.
-
-It also leads to **clean analytical properties**, enabling high-quality sampling with relatively few steps.
 
 ---
-
-Let me know if you'd like this cleaned into a full PDF section or adapted to a presentation!
-
 
 ## References
 
