@@ -87,7 +87,7 @@ $$
 ---
  
 #### Cost with Caching (Optimistidc Propose):
-In this propose we assume that we can idelally compute, for all layers, only the channels that are not cached, which is $C_{out} - c$ (pecentage of C):
+In this propose we assume that we can idelally compute, for all layers, only the channels that are not cached, which is $C_l - c$ (pecentage of $C_l$):
 
 $$
 R_{\text{eff}} = R_{\text{Ds}} + \sum_{l=1}^{L} f(l, C_{l} - c)
