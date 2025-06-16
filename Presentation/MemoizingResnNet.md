@@ -53,19 +53,6 @@ This means that only 20% of the output channels from the final substructure laye
 
 ---
 
-Here's the key issue:
-
-> **Convolutional layers in standard deep learning libraries and GPUs are not structured to compute a subset of output channels efficiently.**
-
-In practice, computing only 80% of the channels is almost as expensive as computing all of them. This is due to:
-
-* Fixed kernel application across all output channels
-* Memory and parallelism inefficiencies when splitting computations across channels
-
-Thus, although 20% of the output is reused from cache, the **actual computational load saved is negligible**, unless a more aggressive architecture or caching mechanism is used.
-
----
-
 ### Analytical Modeling of Computation Cost
 
 Let’s define:
@@ -139,10 +126,10 @@ Assuming:
 We calculate:
 
 $$
-R_{\text{eff}} = R_{\text{Ds}} +  R_{\text{Ns}} = 1.39 \times 10^9 + 2.22 \times 10^9 = 3.61 \times 10^9
+R_{\text{eff}} = R_{\text{Ds}} +  R_{\text{Ns}} = 1.39 \times 10^9 + 1.78 \times 10^9 = 3.17 \times 10^9
 $$
 
-This is **greater than the original** $R_{\text{Ns}}$, meaning the caching system currently increases computation time by \~30%.
+This is **greater than the original** $R_{\text{Ns}}$, meaning the caching system currently increases computation time by \~14%.
 
 ---
 
