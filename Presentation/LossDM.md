@@ -4,7 +4,7 @@ math: mathjax
 ---
 # Deriving the Objective Function from  
 
-**Deep Unsupervised Learning using Nonequilibrium Thermodynamics** and **Denoising Diffusion Probabilistic Models**
+**Deep Unsupervised Learning using Nonequilibrium Thermodynamics*- and **Denoising Diffusion Probabilistic Models**
 
 This derivation aims to express the log-likelihood of a generative model via nonequilibrium thermodynamic principles and estimate it using importance sampling over stochastic trajectories.
 
@@ -124,26 +124,26 @@ $$L_T = D_{\text{KL}}(q(x_T|x_0) \| p(x_T))$$
 
 Quantify how much the final noise $x_T$ (resulting from the forward process) resembles the standard Gaussian noise distribution  $p(x_T)$.
 
-In practice, since the **forward process is very long** (small noise additions $\beta_t$), at the end, $q(x_T|x_0)$ becomes **almost identical** to $p(x_T)$. This KL divergence becomes **very small** and can be **ignored** (or computed once and treated as constant).
+In practice, since the **forward process is very long** (small noise additions $\beta_t$), at the end, $q(x_T|x_0)$ becomes **almost identical** to $p(x_T)$. This KL divergence becomes very small and can be **ignored** (or **treated as constant**).
 
 ---
 
 ## Third Term - Reconstruction term
+
 $$L_0 = -\log p_\theta(x_0 | x_1)$$
 
 At the final step, we need to model the probability of the original discrete data $x_0$ (like pixel values 0–255) starting from a slightly noised version $x_1$. Since the model works in a continuous space $[-1, 1]$, we define the last reverse step $p_\theta(x_0|x_1)$ by discretizing a simple Gaussian distribution:
 
+---
+### **Cumulative Distribution Function (CDF) for discretizing**
 $$
 p_\theta(x_0 | x_1) = \prod_{i=1}^D \int_{\delta^-(x_0^i)}^{\delta^+(x_0^i)} \mathcal{N}(x; \mu^i_\theta(x_1, 1), \sigma^2_1) \, dx
 $$
----
+
 
 - $x_0 \in \{0, 1, \ldots, 255\}^D$ is the quantized data (e.g., RGB pixel values),
 - $\mu_\theta^i(x_1, 1)$ is the predicted mean for pixel $i$,
 - $\sigma_1^2$ is the fixed variance used by the model at the first iteration of the reverse process (typically $\beta_1$ or $\tilde{\beta}_1$).
-
-
-> ⚠️ The reconstruction term $L_0$ is not used in the standard training loss of Ho et al. (2020). It is replaced by a simpler loss, $L_{\text{simple}}$, which trains the model to predict the noise added to the data. This approach has shown better performance in terms of the visual quality of the generated samples.
 
 ---
 
@@ -152,14 +152,14 @@ $$
 We consider the term:
 
 $$
-\sum_{t=2}^T D_{\text{KL}}\left(q(x_{t-1} \mid x_t, x_0) \, \| \, p_\theta(x_{t-1} \mid x_t)\right)
+L_{t-1} = D_{\text{KL}}\left(q(x_{t-1} \mid x_t, x_0) \, \| \, p_\theta(x_{t-1} \mid x_t)\right)
 $$
 
 This measures how well the learned reverse process $p_\theta(x_{t-1} \mid x_t)$ approximates the **true posterior** distribution over the intermediate state $x_{t-1}$, given $x_t$ and the original data $x_0$. This posterior is analytically tractable due to the Gaussianity of the forward process.
 
 ---
 
-## **Computing the True Posterior $q(x_{t-1} \mid x_t, x_0)$**
+### **Computing the True Posterior $q(x_{t-1} \mid x_t, x_0)$**
 
 Given that all transitions in the forward process are Gaussian, and that $x_t$ is a linear transformation of $x_0$ plus Gaussian noise, the posterior is also Gaussian:
 
@@ -169,7 +169,7 @@ $$
 
 Where:
 
-* The **posterior mean** is:
+- The **posterior mean** is:
 
 $$
 \tilde{\mu}_t(x_t, x_0) = 
@@ -177,7 +177,7 @@ $$
 + \frac{\sqrt{\alpha_t} (1 - \bar{\alpha}_{t-1})}{1 - \bar{\alpha}_t} x_t
 $$
 
-* The **posterior variance** is:
+- The **posterior variance** is:
 
 $$
 \tilde{\beta}_t = \frac{1 - \bar{\alpha}_{t-1}}{1 - \bar{\alpha}_t} \beta_t
@@ -185,7 +185,7 @@ $$
 
 ---
 
-## **KL Between Gaussians**
+### **KL Between Gaussians**
 
 The KL divergence between the posterior and the model prediction — both Gaussians with diagonal covariance — is:
 
@@ -206,32 +206,16 @@ Where:
 
 ---
 
-## **Simplification: Fixing the Variance**
+### **Simplification: Fixing the Variance**
 
-Following *Ho et al.*'s approach, if we **fix the model variance** to match the posterior, $\sigma_\theta^2 = \tilde{\beta}_t$, then:
-
-* The log-ratio and variance terms cancel or simplify,
-* The KL becomes proportional to the squared error between predicted and true means:
+Following *Ho et al.* and *Nichol et al.* approches, if we **fix the model variance** to match the posterior, $\sigma_\theta^2 = \tilde{\beta}_t$, then the log-ratio and variance terms cancel or simplify.
 
 $$
-D_{\text{KL}}(q \, \| \, p) = \frac{1}{2 \tilde{\beta}_t}
+L_{t-1} = \mathbb{E}_q \left[ 
+\frac{1}{2 \sigma_\theta^2}
 \left\| \tilde{\mu}_t(x_t, x_0) - \mu_\theta(x_t, t) \right\|^2
+\right] + \text{const}
 $$
-
----
-
-## 💠 Mean Prediction Loss
-
-This suggests the following training objective:
-
-$$
-\mathcal{L}_{\text{mean}} = \mathbb{E}_q \left[
-\left\| \tilde{\mu}_t(x_t, x_0) - \mu_\theta(x_t, t) \right\|^2
-\right]
-$$
-
-However, *Ho et al.* propose a further simplification — rather than predicting $\mu_\theta$, they predict the **original noise** $\epsilon$ used to generate $x_t$.
-
 ---
 
 ### **Rewriting the Forward Process**
@@ -239,42 +223,48 @@ However, *Ho et al.* propose a further simplification — rather than predicting
 From the forward process:
 
 $$
-x_t = \sqrt{\bar{\alpha}_t} x_0 + \sqrt{1 - \bar{\alpha}_t} \epsilon, \quad \epsilon \sim \mathcal{N}(0, I)
-$$
-
-Solving for $x_0$:
-
-$$
+x_t = \sqrt{\bar{\alpha}_t} x_0 + \sqrt{1 - \bar{\alpha}_t} \epsilon, \quad \epsilon \sim \mathcal{N}(0, I) 
+\quad \rightarrow \quad
 x_0 = \frac{1}{\sqrt{\bar{\alpha}_t}} \left( x_t - \sqrt{1 - \bar{\alpha}_t} \epsilon \right)
 $$
 
-Plugging this into $\tilde{\mu}_t(x_t, x_0)$, both the posterior and model means become linear combinations of $x_t$ and $\epsilon$ or $\epsilon_\theta$.
+Plugging this into $\tilde{\mu}_t(x_t, x_0)$, both the posterior and model means become linear combinations of $x_t$ and $\epsilon$ or $\epsilon_\theta$ and we obtain: $\tilde{\mu}_t(x_t, x_0) = \frac{1}{\sqrt{\alpha_t}} \left( x_t - \frac{\beta_t}{\sqrt{1 - \bar{\alpha}_t}} \epsilon \right)$
+
+$$
+L_{t-1} = \mathbb{E}_{x_0, \epsilon} \left[ \frac{1}{2\sigma_t^2} \left\| \frac{1}{\sqrt{\alpha_t}} \left( x_t - \frac{\beta_t}{\sqrt{1 - \bar{\alpha}_t}} \epsilon \right) - \mu_\theta(x_t, t) \right\|^2\right]
+$$
 
 ---
 
-### **Subtracting Posterior and Model Means**
+### **Reparametrization of the Model**
 
-If we write both means:
-
-$$
-\tilde{\mu}_t(x_t, \epsilon) = A_t x_t + B_t \epsilon \\
-\mu_\theta(x_t, t) = A_t x_t + B_t \epsilon_\theta(x_t, t)
-$$
-
-Then:
+That reveal that $\mu_\theta(x_t, t)$ must predict $\frac{1}{\sqrt{\alpha_t}} \left( x_t - \frac{\beta_t}{\sqrt{1 - \bar{\alpha}_t}} \epsilon \right)$ given $x_t$ and $t$. So we can reparametrize, in the same way, the model to predict the noise $\epsilon_\theta(x_t, t)$ instead. We obtiain: $\mu_\theta(x_t, t) = \frac{1}{\sqrt{\alpha_t}} \left( x_t - \frac{\beta_t}{\sqrt{1 - \bar{\alpha}_t}} \epsilon_\theta(x_t, t) \right)$ and we substitute  $\mu_\theta(x_t, t)$ into the $L_{t-1}$ term, we get our final training objective:
 
 $$
-\tilde{\mu}_t(x_t, x_0) - \mu_\theta(x_t, t) = B_t (\epsilon - \epsilon_\theta(x_t, t))
+L_{t-1} = \mathbb{E}_{x_0, t, \epsilon} \left[
+\frac{\beta_t}{2\sigma_t^2 \alpha_t (1 - \bar{\alpha}_t)} 
+\left\| \epsilon - \epsilon_\theta(\sqrt{\bar{\alpha}_t} x_0 + \sqrt{1 - \bar{\alpha}_t} \epsilon, t) \right\|^2
+\right]
 $$
 
-So minimizing the KL is equivalent to minimizing the error in noise prediction.
+
 
 ---
 
-## 💠 Final Training Objective
+## 💠 Final Loss (Variational Lower Bound)
 
-This yields the simplified loss:
+This suggests the following training objective (*Nichol & Dhariwal, 2021*):
 
+$$
+\mathcal{L_{vlb}} = L_0 + \sum_{t=2}^{T} L_{t-1} + L_T 
+$$
+
+
+---
+
+## 💠 Simple Loss
+
+However, *Ho et al.* propose a further simplification where $t=1$ case corresponds to $L_0$ (CDF) and $L_T$ is ignored, leading to a simpler loss function:
 $$
 \mathcal{L}_{\text{simple}} =
 \mathbb{E}_{x_0, t, \epsilon} \left[
@@ -282,13 +272,9 @@ $$
 \right]
 $$
 
-Where:
+With $t \sim \text{Uniform}(1, T)$ and $x_t = \sqrt{\bar{\alpha}_t} x_0 + \sqrt{1 - \bar{\alpha}_t} \epsilon$
 
-* $x_0 \sim \text{data}$,
-* $t \sim \text{Uniform}(1, T)$,
-* $\epsilon \sim \mathcal{N}(0, I)$,
-* $x_t = \sqrt{\bar{\alpha}_t} x_0 + \sqrt{1 - \bar{\alpha}_t} \epsilon$
-
+> The simplified objective to down-weight loss terms corresponding to small t. These terms train the network to denoise data with very small amounts of noise, so it is beneficial to down-weight them so that the network can focus on more difficult denoising tasks at larger t terms. *(Ho et al., 2020)*
 
 ---
 
