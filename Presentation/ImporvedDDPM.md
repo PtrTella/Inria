@@ -3,9 +3,8 @@ marp: true
 math: mathjax
 ---
 
-# Improvements in DDPMs: Learning Variance and Speeding Sampling
-
-This continuation explores the key theoretical advances proposed in *Improved Denoising Diffusion Probabilistic Models*, particularly focusing on optimizing likelihood and enabling efficient sampling through architectural and training innovations.
+# Improvements in DDPMs
+This document explores the key advances proposed in *Improved Denoising Diffusion Probabilistic Models* (Nichol & Dhariwal, 2021).
 
 ---
 
@@ -44,15 +43,13 @@ $$
 
 ## Cosine Noise Schedule
 
-Linear $\beta_t$ schedules over-diffuse early. Instead, define $\bar{\alpha}_t$ via a cosine-based function:
+Linear $\beta_t$ schedules over-diffuse early. Instead, define $\bar{\alpha}_t$ via a cosine-based function to have a linear drop-off in the middle of the process (and a slower near to extremes):
 
 $$
 \bar{\alpha}_t = \frac{f(t)}{f(0)}, \quad f(t) = \cos^2\left(\frac{t/T + s}{1 + s} \cdot \frac{\pi}{2}\right)
 $$
 
-- Slower noise addition in late steps.
-- Smooth decay of information.
-- $s=0.008$ ensures first-step noise is > 1 pixel bin.
+where $\beta_t = 1 - \bar{\alpha}_t / \bar{\alpha}_{t-1}$. The offset $s$ has been defined to avoid too small $\beta_t$ values near $t = 0$ since they found out that it makes hard for the model to estimate $\epsilon$ in the first steps.
 
 [Cosine Schedule IMG](./images/CosScheduler.png)
 
@@ -81,6 +78,8 @@ After training with $T = 4000$, samples can be generated with $K \ll T$ steps:
 3. Predict $\mu_\theta$ and $\Sigma_\theta$ at these reduced steps.
 
 > With 50–100 steps, models maintain near-optimal FID.
+
+[Fast Sampling IMG](./images/FastSampling.png)
 
 ---
 
