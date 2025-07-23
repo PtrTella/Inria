@@ -5,3 +5,4 @@ data/
 *.DS_Store
 Code/dataset.parquet
 dataset.parquet
+Code/Project/__pycache__
