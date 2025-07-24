@@ -1,7 +1,7 @@
 import faiss
 import numpy as np
 from annoy import AnnoyIndex
-from typing import Protocol, Optional, Tuple
+from typing import Protocol, Optional, Tuple, List
 
 class ISimilarityIndex(Protocol):
     def add(self, key: str, emb: np.ndarray): ...
@@ -45,35 +45,122 @@ class LinearIndex(ISimilarityIndex):
     def keys(self):
         return self._keys
 
-class FAISSIndex(ISimilarityIndex):
+class FAISSFlatIPIndex(ISimilarityIndex):
+    """Inner-product brute-force: ottimo per dataset piccoli/medi."""
     def __init__(self, dim: int):
         self.dim = dim
-        self._keys = []
-        self._embs = []
+        self._keys: List[str] = []
+        self._embs: List[np.ndarray] = []
         self.index = faiss.IndexFlatIP(dim)
 
-    def add(self, key, emb):
+    def add(self, key: str, emb: np.ndarray):
         vec = emb.reshape(1, -1).astype(np.float32)
-        self._keys.append(key)
-        self._embs.append(emb)
+        self._keys.append(key); self._embs.append(emb)
         self.index.add(vec)
 
-    def remove(self, key):
+    def remove(self, key: str):
         try:
             idx = self._keys.index(key)
-            self._keys.pop(idx)
-            self._embs.pop(idx)
+            self._keys.pop(idx); self._embs.pop(idx)
             self.index.reset()
             if self._embs:
                 self.index.add(np.stack(self._embs).astype(np.float32))
         except ValueError:
             pass
 
-    def query(self, emb, topk=1):
+    def query(self, emb: np.ndarray, topk: int = 1) -> Tuple[Optional[str], float]:
         if not self._keys:
             return None, -np.inf
         vec = emb.reshape(1, -1).astype(np.float32)
         D, I = self.index.search(vec, min(len(self._keys), topk))
+        return self._keys[I[0][0]], float(D[0][0])
+
+    @property
+    def keys(self):
+        return self._keys
+
+
+class FAISSIVFFlatIndex(ISimilarityIndex):
+    """Inverted file + flat quantization: scalabile a grandi dataset."""
+    def __init__(self, dim: int, nlist: int = 100):
+        self.dim = dim
+        self.nlist = nlist
+        self._keys: List[str] = []
+        self._embs: List[np.ndarray] = []
+        # crea l’indice IVF; richiede .train() prima di add()
+        quantizer = faiss.IndexFlatIP(dim)
+        self.index = faiss.IndexIVFFlat(quantizer, dim, nlist, faiss.METRIC_INNER_PRODUCT)
+        self._trained = False
+
+    def add(self, key: str, emb: np.ndarray):
+        self._keys.append(key); self._embs.append(emb)
+        if not self._trained and len(self._embs) >= self.nlist * 2:
+            data = np.stack(self._embs).astype(np.float32)
+            self.index.train(data)
+            self._trained = True
+        if self._trained:
+            self.index.add(emb.reshape(1, -1).astype(np.float32))
+
+    def remove(self, key: str):
+        # rimuovi e rebuild IVF da zero
+        try:
+            idx = self._keys.index(key)
+            self._keys.pop(idx); self._embs.pop(idx)
+            self.index.reset()
+            self._trained = False
+            all_data = np.stack(self._embs).astype(np.float32)
+            if len(self._embs) >= self.nlist * 2:
+                self.index.train(all_data); self._trained = True
+                self.index.add(all_data)
+        except ValueError:
+            pass
+
+    def query(self, emb: np.ndarray, topk: int = 1) -> Tuple[Optional[str], float]:
+        if not self._keys or not self._trained:
+            return None, -np.inf
+        vec = emb.reshape(1, -1).astype(np.float32)
+        self.index.nprobe = min(10, self.nlist)  # dimensiona il numero di probe
+        D, I = self.index.search(vec, topk)
+        return self._keys[I[0][0]], float(D[0][0])
+
+    @property
+    def keys(self):
+        return self._keys
+
+
+class FAISSHNSWIndex(ISimilarityIndex):
+    """Grafo HNSW: ottimo bilanciamento tra velocità e qualità."""
+    def __init__(self, dim: int, M: int = 32, efConstruction: int = 200, efSearch: int = 50):
+        self.dim = dim
+        self._keys: List[str] = []
+        self._embs: List[np.ndarray] = []
+        # crea grafo HNSW per IP
+        self.index = faiss.IndexHNSWFlat(dim, M, faiss.METRIC_INNER_PRODUCT)
+        self.index.hnsw.efConstruction = efConstruction
+        self.index.hnsw.efSearch = efSearch
+
+    def add(self, key: str, emb: np.ndarray):
+        vec = emb.reshape(1, -1).astype(np.float32)
+        self._keys.append(key); self._embs.append(emb)
+        self.index.add(vec)
+
+    def remove(self, key: str):
+        try:
+            idx = self._keys.index(key)
+            self._keys.pop(idx); self._embs.pop(idx)
+            # FAISS HNSWFlat non supporta rimozione: rebuild completo
+            self.index = faiss.IndexHNSWFlat(self.dim, self.index.hnsw.M, faiss.METRIC_INNER_PRODUCT)
+            self.index.hnsw.efConstruction = self.index.hnsw.efConstruction
+            self.index.hnsw.efSearch = self.index.hnsw.efSearch
+            self.index.add(np.stack(self._embs).astype(np.float32))
+        except ValueError:
+            pass
+
+    def query(self, emb: np.ndarray, topk: int = 1) -> Tuple[Optional[str], float]:
+        if not self._keys:
+            return None, -np.inf
+        vec = emb.reshape(1, -1).astype(np.float32)
+        D, I = self.index.search(vec, topk)
         return self._keys[I[0][0]], float(D[0][0])
 
     @property
@@ -126,64 +213,19 @@ class AnnoyIndexWrapper(ISimilarityIndex):
         return self._keys
     
 
-import scann
-import numpy as np
-from typing import List, Optional, Tuple
 
-class ScaNNIndex:
-    def __init__(self, dim: int):
-        self.dim = dim
-        self._keys: List[str] = []
-        self._embs: List[np.ndarray] = []
-        self._searcher = None
-        self._built = False
+from typing import Callable
 
-    def add(self, key: str, emb: np.ndarray):
-        self._keys.append(key)
-        self._embs.append(emb)
-        self._built = False
+def create_similarity_index(dim: int, backend: str = "faiss_flat") -> ISimilarityIndex:
+    backends: dict[str, Callable[..., ISimilarityIndex]] = {
+        "faiss_flat": FAISSFlatIPIndex,
+        "faiss_ivf": FAISSIVFFlatIndex,
+        "faiss_hnsw": FAISSHNSWIndex,
+        "annoy": AnnoyIndexWrapper,
+        "linear": LinearIndex,
+    }
+    if backend not in backends:
+        raise ValueError(f"Unknown backend: {backend}, available: {list(backends.keys())}")
+    # passaggi di parametri specifici per IVF o HNSW se vuoi esporli
+    return backends[backend](dim)
 
-    def remove(self, key: str):
-        try:
-            idx = self._keys.index(key)
-            self._keys.pop(idx)
-            self._embs.pop(idx)
-            self._built = False
-        except ValueError:
-            pass
-
-    def _rebuild(self):
-        if not self._embs:
-            self._searcher = None
-            return
-        data = np.stack(self._embs).astype(np.float32)
-        self._searcher = scann.scann_ops_pybind.builder(data, 10, "dot_product")\
-                        .score_ah(2, anisotropic_quantization_threshold=0.2)\
-                        .reorder(100).build()
-        self._built = True
-
-    def query(self, emb: np.ndarray, topk: int = 1) -> Tuple[Optional[str], float]:
-        if not self._built:
-            self._rebuild()
-        if not self._keys or self._searcher is None:
-            return None, -np.inf
-        neighbors, distances = self._searcher.search(emb.astype(np.float32))
-        idx = neighbors[0]
-        key = self._keys[idx]
-        sim = float(np.dot(self._embs[idx], emb))
-        return key, sim
-
-    @property
-    def keys(self):
-        return self._keys
-
-
-def create_similarity_index(dim: int, backend: str = "faiss") -> ISimilarityIndex:
-    if backend == "faiss":
-        return FAISSIndex(dim)
-    elif backend == "annoy":
-        return AnnoyIndexWrapper(dim)
-    elif backend == "linear":
-        return LinearIndex(dim)
-    else:
-        raise ValueError(f"Unknown backend: {backend}. Supported: 'faiss', 'annoy', 'linear'.")

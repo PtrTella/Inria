@@ -33,11 +33,11 @@ def get_dashboard(manager: PromptDatasetManager, caching_class: List[Type[BaseSi
     # --- Widgets ---
     policy_select   = pn.widgets.Select(name='Policy', options=list(caching_dict.keys()), value=list(caching_dict.keys())[0])
     trace_select    = pn.widgets.RadioButtonGroup(name='Trace', options=['Sequential','Random'], button_type='primary')
-    backend_select = pn.widgets.RadioButtonGroup(name='Backend', options=['faiss', 'annoy', 'linear'], button_type='primary')
-    capacity_slider = pn.widgets.IntSlider(name='Capacity', start=50, end=2000, step=50, value=500)
+    backend_select = pn.widgets.RadioButtonGroup(name='Backend', options=['faiss_flat', 'linear'], button_type='primary')
+    capacity_slider = pn.widgets.IntSlider(name='Capacity', start=50, end=10000, step=150, value=500)
     threshold_slider= pn.widgets.FloatSlider(name='Threshold', start=0.5, end=1.0, step=0.05, value=0.8)
     ttl_slider      = pn.widgets.IntSlider(name='TTL', start=10, end=500, step=10, value=100)
-    adaptive_thresh_slider = pn.widgets.FloatSlider(name='Adaptive Threshold Coeff.', start=-1.0, end=1.0, step=0.2, value=0.0)
+    adaptive_thresh_slider = pn.widgets.FloatSlider(name='Adaptive Threshold Coeff.', start=0.0, end=1.0, step=0.2, value=0.0)
     start_button    = pn.widgets.Button(name='Start Live Simulation', button_type='success')
     stop_button     = pn.widgets.Button(name='Stop & Reset', button_type='danger')
 
@@ -45,14 +45,9 @@ def get_dashboard(manager: PromptDatasetManager, caching_class: List[Type[BaseSi
     text_hit_rate   = pn.widgets.StaticText(name='Hit Rate', value='0.0%')
     text_slide_rate = pn.widgets.StaticText(name='Sliding Hit Rate (1k)', value='0.0%')
     text_occupancy  = pn.widgets.StaticText(name='Cache Occupancy', value='0/0 (0.0%)')
-    text_rps        = pn.widgets.StaticText(name='Requests/sec', value='0.0')
+    text_rps        = pn.widgets.StaticText(name='Execution Time', value='0.0')
+    text_hit_quality = pn.widgets.StaticText(name='Hit Quality', value='0.0')
 
-    # --- Gauge pane for live stats ---
-    gauge_hit_quality = pn.widgets.indicators.Number(
-        name='Hit Similarity Quality',
-        value=0.0,
-    )
-        
 
 
     stream = Pipe(data=[])
@@ -79,7 +74,6 @@ def get_dashboard(manager: PromptDatasetManager, caching_class: List[Type[BaseSi
             ylim=(0, 100), xlim=(1, max(xs)),
             xlabel='Request',
             legend_position='top_right',
-            tools=[]
         )
 
     dmap = hv.DynamicMap(update_plot, streams=[stream])
@@ -101,19 +95,18 @@ def get_dashboard(manager: PromptDatasetManager, caching_class: List[Type[BaseSi
         # Hit similarity media
         sim_vals = [s for (_, _, _, hit, s) in history if hit and s is not None]
         avg_sim = min(sum(sim_vals) / len(sim_vals) if sim_vals else 0.0, 1.0)
-        avg_sim = round(avg_sim, 4)  # Arrotonda a 4 decimali
 
         # UI update
         text_hit_rate.value = f"{hr * 100:.1f}%"
         text_slide_rate.value = f"{sliding_hr * 100:.1f}%"
-        text_occupancy.value = f"{len(c.index.keys)}/{c.capacity} ({occ * 100:.1f}%)"
-        gauge_hit_quality.value = avg_sim
+        text_occupancy.value = f"{occ * 100:.1f}%"
+        text_hit_quality.value = f"{avg_sim:.4f}"
 
 
         # RPS
         elapsed = time.time() - start_time
         rps = idx / elapsed if elapsed > 0 else 0.0
-        text_rps.value = f"{rps:.1f}"
+        text_rps.value = f"{elapsed:.1f}"
 
         if idx % 100 == 0 or idx == len(requests):
             stream.send([(i, h * 100, o * 100) for i, h, o, _, _ in history])
@@ -180,7 +173,7 @@ def get_dashboard(manager: PromptDatasetManager, caching_class: List[Type[BaseSi
         current_idx = 0
         text_hit_rate.value = '0.0%'
         text_slide_rate.value = '0.0%'
-        text_occupancy.value = '0/0 (0.0%)'
+        text_occupancy.value = '0.0%'
         text_rps.value = '0.0'
         stream.send([(0, 0, 0)])
         if cache:
@@ -192,11 +185,10 @@ def get_dashboard(manager: PromptDatasetManager, caching_class: List[Type[BaseSi
     dashboard = pn.Column(
         pn.Row(policy_select),
         pn.Row(start_button, stop_button, trace_select, backend_select),
-        pn.Row(text_hit_rate, text_slide_rate, text_occupancy, text_rps),
         pn.Row(
             pn.Column(pn.panel(dmap)),
             pn.Column(
-                capacity_slider, threshold_slider, adaptive_thresh_slider, ttl_slider, gauge_hit_quality
+                capacity_slider, threshold_slider, adaptive_thresh_slider, ttl_slider, text_hit_rate, text_hit_quality, text_rps, text_occupancy
             ),
         ),
     )

@@ -1,4 +1,5 @@
 from typing import Dict, List, Optional, Tuple, Union
+import faiss
 import numpy as np
 import pandas as pd
 import pyarrow.parquet as pq
@@ -17,10 +18,13 @@ class PromptDatasetManager:
         self,
         path: str,
         max_rows: Optional[int] = None,
+        add_columns: Optional[List[str]] = None,
         load_embeddings: bool = True
     ):
         # 1) Lettura Parquet
         cols = ['prompt','clip_emb','user_name','timestamp']
+        if add_columns:
+            cols.extend(add_columns)
         table = pq.read_table(path, columns=cols)
         if max_rows:
             table = table.slice(0, max_rows)
@@ -171,3 +175,30 @@ class PromptDatasetManager:
             time_order = self.df.sort_values('timestamp').index.to_numpy()
             idxs = time_order if num_prompts is None else time_order[:num_prompts]
         return [(self.prompts_arr[i], self.emb_matrix[i]) for i in idxs]
+    
+
+    def get_k_nearest_images(self, row_index: int = None, k: int = 5) -> pd.DataFrame:
+        """
+        Restituisce le k immagini più vicine (escludendo quella stessa) usando FAISS Flat Index.
+        
+        :param row_index: indice della riga di riferimento
+        :param k: numero di immagini simili da restituire (esclusa quella stessa)
+        :return: DataFrame con le k righe più vicine (metadati inclusi)
+        """
+        if row_index is None:
+            row_index = random.randint(0, len(self.df) - 1)
+
+        if self.emb_matrix is None or self.df is None:
+            raise ValueError("emb_matrix o df non sono inizializzati.")
+
+        vectors = self.emb_matrix.astype('float32')
+        index = faiss.IndexFlatL2(vectors.shape[1])
+        index.add(vectors)
+
+        query = vectors[row_index].reshape(1, -1)
+        distances, indices = index.search(query, k + 1)  # +1 perché include se stesso
+
+        # Rimuove l'indice della query se incluso, in realtà è sempre il primo e lo voglio
+        #result_indices = [i for i in indices[0] if i != row_index][:k]
+
+        return self.df.iloc[indices[0]], distances[0]
