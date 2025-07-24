@@ -1,11 +1,14 @@
-import BaseCache as bc
+from typing import Optional
+from unittest.mock import Base
 import numpy as np
 from collections import defaultdict
+from collections import OrderedDict
+from BaseCache import BaseSimilarityCache
 
-class LRUCache(bc.BaseSimilarityCache):
+class LRUCache(BaseSimilarityCache):
     """Least-Recently-Used eviction policy."""
-    def __init__(self, capacity: int, threshold: float, dim: int, use_faiss: bool = True):
-        super().__init__(capacity, threshold, dim, use_faiss)
+    def __init__(self, capacity: int, threshold: float, dim: int, backend: str, adaptive_thresh = False):
+        super().__init__(capacity, threshold, dim, backend, adaptive_thresh)
         from collections import OrderedDict
         self.order = OrderedDict()  # key -> None
 
@@ -23,10 +26,10 @@ class LRUCache(bc.BaseSimilarityCache):
         # least recently used = first key
         return next(iter(self.order))
 
-class LFUCache(bc.BaseSimilarityCache):
+class LFUCache(BaseSimilarityCache):
     """Least-Frequently-Used eviction policy."""
-    def __init__(self, capacity: int, threshold: float, dim: int, use_faiss: bool = True):
-        super().__init__(capacity, threshold, dim, use_faiss)
+    def __init__(self, capacity: int, threshold: float, dim: int, backend: str, adaptive_thresh = False):
+        super().__init__(capacity, threshold, dim, backend, adaptive_thresh)
         self.freq = defaultdict(int)
 
     def _on_hit(self, key: str):
@@ -42,7 +45,7 @@ class LFUCache(bc.BaseSimilarityCache):
         # key with minimal freq
         return min(self.freq, key=lambda k: self.freq[k])
 
-class TTLCache(bc.BaseSimilarityCache):
+class TTLCache(BaseSimilarityCache):
     """Time-to-Live eviction: removes entries not seen in last ttl requests."""
     def __init__(
         self,
@@ -50,9 +53,10 @@ class TTLCache(bc.BaseSimilarityCache):
         threshold: float,
         dim: int,
         ttl: int,
-        use_faiss: bool = True
+        backend: str,
+        adaptive_thresh: bool = False
     ):
-        super().__init__(capacity, threshold, dim, use_faiss)
+        super().__init__(capacity, threshold, dim, backend, adaptive_thresh)
         self.ttl = ttl
         self.time = 0
         self.last_seen = {}  # key -> last request time
@@ -79,34 +83,59 @@ class TTLCache(bc.BaseSimilarityCache):
         return min(self.last_seen, key=lambda k: self.last_seen[k])
     
 
+
+#   Randomized Cache Policies   #
+
 class RNDLRUCache(LRUCache):
     """Randomized LRU where threshold varies at each query."""
-    def __init__(self, capacity, threshold, dim, use_faiss=True, min_threshold=0.5, max_threshold=1.0):
-        super().__init__(capacity, threshold, dim, use_faiss)
+    def __init__(self, capacity, threshold, dim, backend=True, min_threshold=0.5, max_threshold=1.0):
+
+        super().__init__(capacity, threshold, dim, backend)
         self.min_threshold = min_threshold
         self.max_threshold = max_threshold
 
-    def query(self, key: str, emb: np.ndarray) -> bool:
-        # random threshold every time
+    def _should_accept(self, key: Optional[str], similarity: float) -> bool:
+        # threshold random per ogni richiesta
         self.threshold = np.random.uniform(self.min_threshold, self.max_threshold)
-        return super().query(key, emb)
+        return similarity >= self.threshold
 
 
 class RNDTTLCache(TTLCache):
     """Randomized TTL with varying similarity threshold per request."""
-    def __init__(self, capacity, threshold, dim, ttl, use_faiss=True, min_threshold=0.5, max_threshold=1.0):
-        super().__init__(capacity, threshold, dim, ttl, use_faiss)
+    def __init__(self, capacity, threshold, dim, ttl, backend=True, min_threshold=0.5, max_threshold=1.0):
+        super().__init__(capacity, threshold, dim, ttl, backend)
         self.min_threshold = min_threshold
         self.max_threshold = max_threshold
 
-    def query(self, key: str, emb: np.ndarray) -> bool:
-        expired = [k for k, t in self.last_seen.items() if self.time - t > self.ttl]
-        for k in expired:
-            self.index.remove(k)
-            del self.last_seen[k]
-        # random threshold
+    def _should_accept(self, key: Optional[str], similarity: float) -> bool:
+        # threshold random per ogni richiesta
         self.threshold = np.random.uniform(self.min_threshold, self.max_threshold)
-        hit = bc.BaseSimilarityCache.query(self, key, emb)
-        self.time += 1
-        return hit
+        return similarity >= self.threshold
 
+
+class TwoLRUCache(LRUCache):
+    """
+    TwoLRU: filtro LRU + cache principale.
+    Promuove un oggetto solo se è nel filtro.
+    """
+    def __init__(self, capacity: int, threshold: float, dim: int, backend: str,
+                 filter_ratio: float = 0.1, adaptive_thresh: bool = False):
+        super().__init__(capacity, threshold, dim, backend, adaptive_thresh)
+        self.filter_size = max(1, int(capacity * filter_ratio))
+        self.filter_order = OrderedDict()
+
+    @BaseSimilarityCache.adaptive_acceptance
+    def _should_accept(self, key, sim) -> bool:
+        # Se simile a un oggetto già in cache → hit diretto
+        if sim >= self.threshold:
+            return True
+        # Altrimenti, controlla se è nel filtro
+        if key in self.filter_order:
+            self.filter_order.pop(key)  # promuovo → tolgo dal filtro
+            return True
+        else:
+            # Prima volta: inserisco nel filtro, rifiuto
+            self.filter_order[key] = None
+            if len(self.filter_order) > self.filter_size:
+                self.filter_order.popitem(last=False)
+            return False

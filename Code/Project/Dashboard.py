@@ -5,7 +5,7 @@ from holoviews.streams import Pipe
 import numpy as np
 import threading, time
 from holoviews import opts
-from typing import Type, List
+from typing import Optional, Type, List
 from BaseCache import BaseSimilarityCache
 from PromptDatasetManager import PromptDatasetManager
 
@@ -32,17 +32,28 @@ def get_dashboard(manager: PromptDatasetManager, caching_class: List[Type[BaseSi
 
     # --- Widgets ---
     policy_select   = pn.widgets.Select(name='Policy', options=list(caching_dict.keys()), value=list(caching_dict.keys())[0])
+    trace_select    = pn.widgets.RadioButtonGroup(name='Trace', options=['Sequential','Random'], button_type='primary')
+    backend_select = pn.widgets.RadioButtonGroup(name='Backend', options=['faiss', 'annoy', 'linear'], button_type='primary')
     capacity_slider = pn.widgets.IntSlider(name='Capacity', start=50, end=2000, step=50, value=500)
     threshold_slider= pn.widgets.FloatSlider(name='Threshold', start=0.5, end=1.0, step=0.05, value=0.8)
     ttl_slider      = pn.widgets.IntSlider(name='TTL', start=10, end=500, step=10, value=100)
-    trace_select    = pn.widgets.RadioButtonGroup(name='Trace', options=['Sequential','Random'], button_type='primary')
+    adaptive_thresh_slider = pn.widgets.FloatSlider(name='Adaptive Threshold Coeff.', start=-1.0, end=1.0, step=0.2, value=0.0)
     start_button    = pn.widgets.Button(name='Start Live Simulation', button_type='success')
     stop_button     = pn.widgets.Button(name='Stop & Reset', button_type='danger')
 
+    # --- Text widgets for stats ---
     text_hit_rate   = pn.widgets.StaticText(name='Hit Rate', value='0.0%')
     text_slide_rate = pn.widgets.StaticText(name='Sliding Hit Rate (1k)', value='0.0%')
     text_occupancy  = pn.widgets.StaticText(name='Cache Occupancy', value='0/0 (0.0%)')
     text_rps        = pn.widgets.StaticText(name='Requests/sec', value='0.0')
+
+    # --- Gauge pane for live stats ---
+    gauge_hit_quality = pn.widgets.indicators.Number(
+        name='Hit Similarity Quality',
+        value=0.0,
+    )
+        
+
 
     stream = Pipe(data=[])
 
@@ -73,56 +84,75 @@ def get_dashboard(manager: PromptDatasetManager, caching_class: List[Type[BaseSi
 
     dmap = hv.DynamicMap(update_plot, streams=[stream])
 
-    def push_to_pipe(event_type, key, c, idx):
-        hits = (history[-1][1] * (idx - 1) if history else 0) + (1 if event_type == 'hit' else 0)
-        hr = hits / idx
+    def push_to_pipe(event_type, key, c, idx, sim: Optional[float] = None):
+        is_hit = event_type == 'hit'
+        hits = (history[-1][1] * (idx - 1) if history else 0) + (1 if is_hit else 0)
+        hr = hits / idx if idx > 0 else 0.0
         occ = len(c.index.keys) / c.capacity
 
-        history.append((idx, hr, occ, event_type == 'hit'))
+        # Aggiungiamo sim (solo per hit) come quinto valore
+        history.append((idx, hr, occ, is_hit, sim if is_hit else None))
 
+        # Sliding HR
         window = history[-1000:] if len(history) > 1000 else history
         sliding_hits = sum(1 for h in window if h[3])
         sliding_hr = sliding_hits / len(window) if window else 0.0
 
+        # Hit similarity media
+        sim_vals = [s for (_, _, _, hit, s) in history if hit and s is not None]
+        avg_sim = min(sum(sim_vals) / len(sim_vals) if sim_vals else 0.0, 1.0)
+        avg_sim = round(avg_sim, 4)  # Arrotonda a 4 decimali
+
+        # UI update
         text_hit_rate.value = f"{hr * 100:.1f}%"
         text_slide_rate.value = f"{sliding_hr * 100:.1f}%"
         text_occupancy.value = f"{len(c.index.keys)}/{c.capacity} ({occ * 100:.1f}%)"
+        gauge_hit_quality.value = avg_sim
 
+
+        # RPS
         elapsed = time.time() - start_time
         rps = idx / elapsed if elapsed > 0 else 0.0
         text_rps.value = f"{rps:.1f}"
 
         if idx % 100 == 0 or idx == len(requests):
-            stream.send([(i, h * 100, o * 100) for i, h, o, _ in history])
+            stream.send([(i, h * 100, o * 100) for i, h, o, _, _ in history])
+
 
     def create_cache(policy_class, params):
-        # Ottieni la firma del costruttore
+        # Passa i parametri come kwargs, ignora quelli non accettati
         sig = inspect.signature(policy_class.__init__)
-        # Prendi solo i parametri compatibili
-        valid_keys = sig.parameters.keys()
-        # Filtra quelli compatibili (ignora 'self')
-        filtered = {k: v for k, v in params.items() if k in valid_keys and k != 'self'}
-        return policy_class(**filtered)
-    
+        valid_keys = set(sig.parameters.keys()) - {'self'}
+        filtered = {k: v for k, v in params.items() if k in valid_keys}
+        try:
+            return policy_class(**filtered)
+        except TypeError:
+            # Se il costruttore accetta solo **kwargs
+            return policy_class(**params)
+
     def setup_cache():
         nonlocal cache, requests
         cap = capacity_slider.value
         th = threshold_slider.value
         ttl = ttl_slider.value
+        adaptive_thresh = adaptive_thresh_slider.value if adaptive_thresh_slider.value > 0 else False
         trace = seq_requests if trace_select.value=='Sequential' else rand_requests
+        backend = backend_select.value
         requests = trace
         policy = policy_select.value
-        
+
         cache = create_cache(caching_dict[policy], {
             'capacity': cap,
             'threshold': th,
             'dim': dim,
-            'ttl': ttl,
-            'use_faiss': True  # Imposta a True se vuoi usare FAISS
+            'adaptive_thresh': adaptive_thresh,
+            'backend': backend,
+            'ttl': ttl
         })
 
-        def observer(event_type, key, c):
-            push_to_pipe(event_type, key, c, current_idx)
+        def observer(event_type, key, c, sim=None):
+            push_to_pipe(event_type, key, c, current_idx, sim)
+
 
         cache.register_observer(observer)
 
@@ -161,10 +191,14 @@ def get_dashboard(manager: PromptDatasetManager, caching_class: List[Type[BaseSi
 
     dashboard = pn.Column(
         pn.Row(policy_select),
-        pn.Row(start_button, stop_button, trace_select),
+        pn.Row(start_button, stop_button, trace_select, backend_select),
         pn.Row(text_hit_rate, text_slide_rate, text_occupancy, text_rps),
-        pn.panel(dmap),
-        pn.Row(capacity_slider, threshold_slider, ttl_slider)
+        pn.Row(
+            pn.Column(pn.panel(dmap)),
+            pn.Column(
+                capacity_slider, threshold_slider, adaptive_thresh_slider, ttl_slider, gauge_hit_quality
+            ),
+        ),
     )
 
     return dashboard

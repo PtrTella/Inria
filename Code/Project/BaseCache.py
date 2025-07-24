@@ -1,71 +1,9 @@
+from functools import wraps
 import numpy as np
-import faiss
+from Backend import ISimilarityIndex, create_similarity_index
 from typing import Callable, List, Tuple, Optional
 
-class SimilarityIndex:
-    """
-    Wraps a FAISS inner-product index for fast nearest-neighbor search over embeddings.
-    Maintains mapping from keys to embeddings and back.
-    """
-    def __init__(self, dim: int, use_faiss: bool = True):
-        self.dim = dim
-        self.use_faiss = use_faiss
-        # key list in same order as index vectors
-        self.keys: List[str] = []
-        # linear store for fallback
-        self.embs: List[np.ndarray] = []
-        if self.use_faiss:
-            # IndexFlatIP for inner-product similarity
-            self.index = faiss.IndexFlatIP(dim)
 
-    def add(self, key: str, emb: np.ndarray):
-        """Add a new vector to the index."""
-        vec = emb.reshape(1, -1).astype(np.float32)
-        self.keys.append(key)
-        self.embs.append(emb)
-        if self.use_faiss:
-            self.index.add(vec)
-
-    def remove(self, key: str):
-        """Remove a key (and its embedding) from the index. Requires rebuild."""
-        # find position
-        try:
-            idx = self.keys.index(key)
-        except ValueError:
-            return
-        # drop
-        self.keys.pop(idx)
-        self.embs.pop(idx)
-        if self.use_faiss:
-            # rebuild index
-            self.index.reset()
-            all_vecs = np.stack(self.embs).astype(np.float32)
-            if len(all_vecs):
-                self.index.add(all_vecs)
-
-    def query(self, emb: np.ndarray, topk: int = 1) -> Tuple[Optional[str], float]:
-        """
-        Search for the most similar cached embedding to `emb`.
-        Returns (best_key, best_sim).
-        If cache empty, returns (None, -inf).
-        """
-        if not self.keys:
-            return None, -np.inf
-        vec = emb.reshape(1, -1).astype(np.float32)
-        if self.use_faiss:
-            D, I = self.index.search(vec, min(len(self.keys), topk))
-            best_sim = float(D[0,0])
-            best_key = self.keys[I[0,0]]
-            return best_key, best_sim
-        else:
-            # linear scan
-            best_key, best_sim = None, -np.inf
-            for k, e in zip(self.keys, self.embs):
-                sim = float(np.dot(e, emb))
-                if sim > best_sim:
-                    best_sim = sim
-                    best_key = k
-            return best_key, best_sim
 
 class BaseSimilarityCache:
     """
@@ -73,31 +11,46 @@ class BaseSimilarityCache:
     that riceveranno eventi: 'hit', 'miss', 'add', 'evict'.
     """
     def __init__(
-        self, capacity: int, threshold: float, dim: int, use_faiss: bool = True
+        self, capacity: int, threshold: float, dim: int, backend: str = "faiss", adaptive_thresh = False
     ):
         self.capacity = capacity
         self.threshold = threshold
-        self.index = SimilarityIndex(dim, use_faiss)
+        self.adaptive_thresh = adaptive_thresh
+        self.index = create_similarity_index(dim, backend)
         self._observers: List[Callable[[str, str, "BaseSimilarityCache"], None]] = []
 
     def register_observer(self, fn: Callable[[str, str, 'BaseSimilarityCache'], None]):
         """fn(event_type, key, cache)"""
         self._observers.append(fn)
 
-    def _notify(self, event_type: str, key: Optional[str]):
+    def _notify(self, event_type: str, key: Optional[str], sim: Optional[float] = None):
         for fn in self._observers:
-            fn(event_type, key, self)
+            fn(event_type, key, self, sim)
 
     def query(self, key: str, emb: np.ndarray) -> bool:
         best_key, best_sim = self.index.query(emb)
-        if best_sim >= self.threshold:
+
+        if self._should_accept(best_key, best_sim):
             self._on_hit(best_key)
-            self._notify('hit', best_key)
+            self._notify('hit', best_key, best_sim)
             return True
         else:
-            self._notify('miss', key)
+            self._notify('miss', key, best_sim)
             self._on_miss(key, emb)
             return False
+
+    def adaptive_acceptance(method):
+        def wrapped(self, key, sim):
+            if self.adaptive_thresh:
+                occ = len(self.index.keys) / self.capacity
+                dyn_thresh = min(1.0, self.threshold * (1 + self.adaptive_thresh * occ))
+                self.threshold = dyn_thresh
+            return method(self, key, sim)
+        return wrapped
+
+    @adaptive_acceptance
+    def _should_accept(self, key: Optional[str], sim: float) -> bool:
+        return sim >= self.threshold  # Default behaviour
 
     def _on_miss(self, key: str, emb: np.ndarray):
         if len(self.index.keys) >= self.capacity:
@@ -112,5 +65,5 @@ class BaseSimilarityCache:
     # Subclasses must implement:
     def _on_add(self, key: str):        pass
     def _on_evict(self, key: str):      pass
-    def _on_hit(self, key: str):        raise NotImplementedError
-    def _select_eviction(self) -> str:  raise NotImplementedError
+    def _on_hit(self, key: str):        pass
+    def _select_eviction(self) -> str:  pass
