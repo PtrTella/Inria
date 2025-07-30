@@ -1,7 +1,8 @@
-from functools import wraps
+import time
 import numpy as np
-from Backend import ISimilarityIndex, create_similarity_index
-from typing import Callable, List, Tuple, Optional
+import pandas as pd
+from Backend_patched import create_similarity_index
+from typing import Callable, List, Optional, Type
 
 
 
@@ -11,7 +12,7 @@ class BaseSimilarityCache:
     that riceveranno eventi: 'hit', 'miss', 'add', 'evict'.
     """
     def __init__(
-        self, capacity: int, threshold: float, dim: int, backend: str = "faiss", adaptive_thresh = False
+        self, capacity: int, threshold: float, dim: int, backend: str = "flat_faiss", adaptive_thresh = False
     ):
         self.capacity = capacity
         self.threshold = threshold
@@ -67,3 +68,96 @@ class BaseSimilarityCache:
     def _on_evict(self, key: str):      pass
     def _on_hit(self, key: str):        pass
     def _select_eviction(self) -> str:  pass
+
+
+class CacheSimulator:
+    def __init__(self):
+        self.runs = {}        # run_id → metadata
+        self.histories = {}   # run_id → list of events (dicts)
+        self.current_run = None
+        self._gui_subscribers = []
+
+    def run(self, run_id, policy_name, policy_class : Type[BaseSimilarityCache], policy_args, embeddings, keys, trace_indices):
+
+        metadata = {
+            'run_id': run_id,
+            'policy': policy_name,
+            'params': policy_args,
+            'start_time': time.time(),
+            'hit': 0,
+            'miss': 0,
+            'total': 0,
+        }
+
+        self.runs[run_id] = metadata
+        self.histories[run_id] = []
+
+        # Crea la cache e collega l'observer corretto
+        def observer(event_type, key, cache_obj, sim):
+            self._observe(run_id, event_type, key, cache_obj, sim)
+
+        cache = policy_class(**policy_args)
+        cache.register_observer(observer)
+
+        for step, idx in enumerate(trace_indices):
+            key = keys[idx]
+            emb = embeddings[idx]
+            result = cache.query(key, emb)
+            metadata['total'] += 1
+            if result:
+                metadata['hit'] += 1
+            else:
+                metadata['miss'] += 1
+
+        metadata['end_time'] = time.time()
+        metadata['duration'] = metadata['end_time'] - metadata['start_time']
+        self.current_run = run_id
+
+    def _observe(self, run_id, event_type, key, cache, sim):
+        # Salva l'evento
+        entry = dict(
+            event=event_type,
+            key=key,
+            sim=sim,
+            timestamp=time.time(),
+            cache_occupancy=len(cache.index.keys),
+        )
+        self.histories[run_id].append(entry)
+
+        # Notifica eventuali dashboard
+        for cb in self._gui_subscribers:
+            cb(run_id, event_type, entry)
+
+    def get_summary(self, run_id):
+        meta = self.runs[run_id]
+        return {
+            'run_id': run_id,
+            'policy': meta['policy'],
+            'hit_rate': meta['hit'] / meta['total'] if meta['total'] > 0 else 0,
+            'miss_rate': meta['miss'] / meta['total'] if meta['total'] > 0 else 0,
+            'duration': meta.get('duration', 0.0),
+            'params': meta['params'],
+        }
+
+    def get_history(self, run_id) -> pd.DataFrame:
+        return pd.DataFrame(self.histories[run_id])
+
+    def export(self, path, format='csv'):
+        if self.current_run is None:
+            raise ValueError("No run to export.")
+        df = self.get_history(self.current_run)
+        if format == 'csv':
+            df.to_csv(path, index=False)
+        elif format == 'json':
+            df.to_json(path, orient='records')
+        elif format == 'parquet':
+            df.to_parquet(path, index=False)
+        else:
+            raise ValueError(f"Unsupported format: {format}")
+
+    def subscribe_events(self, callback):
+        """
+        Register a callback to receive cache event updates: 
+        fn(run_id, event_type, event_data_dict)
+        """
+        self._gui_subscribers.append(callback)

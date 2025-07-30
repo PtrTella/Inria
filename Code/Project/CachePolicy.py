@@ -1,6 +1,5 @@
-from typing import Optional
-from unittest.mock import Base
 import numpy as np
+from typing import Optional
 from collections import defaultdict
 from collections import OrderedDict
 from BaseCache import BaseSimilarityCache
