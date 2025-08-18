@@ -2,67 +2,151 @@ import random
 import numpy as np
 from collections import deque
 
+from collections import deque
+import random
+import numpy as np
 from BaseCache import BaseSimilarityCache
+
+def _ensure_unit(x: np.ndarray, eps: float = 1e-12) -> np.ndarray:
+    v = np.asarray(x, dtype=np.float32).reshape(-1)
+    n = float(np.linalg.norm(v))
+    if n <= eps: return v
+    if abs(n - 1.0) <= 5e-3: return v
+    return (v / n).astype(np.float32, copy=False)
+
+def _cosine(a: np.ndarray, b: np.ndarray) -> float:
+    return float(np.dot(a, b))
+
+def _ca_from_sim(sim: float) -> float:
+    # Ca in [0,1] se i vettori sono normalizzati
+    return max(0.0, min(1.0, (1.0 - float(sim)) * 0.5))
 
 class QLRUDeltaCCache(BaseSimilarityCache):
     """
-    qLRU-ΔC similarity cache.
-    Probabilistic insertion and refresh based on approximation cost.
+    qLRU-ΔC (Neglia et al.).
+    - Coda LRU (deque) per l'ordine.
+    - Miss: inserimento di x con prob. q.
+    - Approx-hit: serve z=argmin Ca(x,y); refresh z con prob. (C(x,S\{z})-Ca(x,z))/Cr;
+                  con prob. q*Ca(x,z)/Cr, recupera comunque x e lo inserisce (head).
     """
-    def __init__(self, capacity, threshold, dim, backend, ca_func = lambda x, y: np.linalg.norm(x - y), cr = 1.0, q=0.2, adaptive_thresh=False):
+    def __init__(self, capacity, threshold, dim, backend,
+                 ca_func=None, cr=0.2, q=0.2, adaptive_thresh=False,
+                 mode='paper'):
         super().__init__(capacity, threshold, dim, backend, adaptive_thresh)
-        self.ca_func = ca_func  # Callable: Ca(x, y)
-        self.cr = cr            # retrieval cost
-        self.q = q              # admission probability
-        self.queue = deque()    # LRU queue
+        # default: Ca=(1-cos)/2 coerente con indice coseno
+        self.ca = (lambda a,b: _ca_from_sim(_cosine(a,b))) if ca_func is None else ca_func
+        self.cr = float(cr)
+        self.q = float(q)
+        self.queue = deque()     # LRU order: left = MRU, right = LRU
+        self.mode = mode         # 'paper' usa Ca<=Cr; 'threshold' usa self.threshold
+
+        # Sanity: per refresh serve 2-NN
+        self._has_topk = hasattr(self.index, "query_topk")
+
+    # --- helper per decisione approx-hit coerente
+    def _admissible(self, best_sim: float, best_ca: float) -> bool:
+        if self.mode == 'paper':
+            return best_ca <= self.cr
+        return (best_sim is not None) and (best_sim >= float(self.threshold))
 
     def query(self, key: str, emb: np.ndarray) -> bool:
-        best_key, best_sim = self.index.query(emb)
+        x = _ensure_unit(emb)
 
-        if best_key and self._should_accept(best_key, best_sim):
-            # Hit approssimato o esatto
-            emb_z = self.index.get_embedding(best_key)
-            approx_cost = self.ca_func(emb, emb_z)
+        # 1-NN (e idealmente 2-NN) per hit e refresh prob
+        if self._has_topk:
+            topk = self.index.query_topk(x, 2)  # [(key, sim), ...]
+        else:
+            ## NON SERVE IN TEORIA GESTITO GIA DAL BACKEND
+            # fallback: scan lineare
+            sims = []
+            for k in self.index.keys:
+                vk = self.index.get_embedding(k)
+                if vk is not None:
+                    sims.append((k, _cosine(x, vk)))
+            sims.sort(key=lambda kv: kv[1], reverse=True)
+            topk = sims[:2]
 
-            # Refresh z con prob. proporzionale al saving
-            if random.random() < (self.cr - approx_cost) / self.cr:
-                if best_key in self.queue:
-                    self.queue.remove(best_key)
-                    self.queue.appendleft(best_key)
+        hit = False
+        best_key, best_sim = (None, None)
+        if topk:
+            best_key, best_sim = topk[0]
+            best_ca = self.ca(x, self.index.get_embedding(best_key))
+            if self._admissible(best_sim, best_ca):
+                # ---- approx-hit path ----
+                z = best_key
+                ca_xz = best_ca
 
-            # Inserisci x anche se è un hit approssimato, con bassa prob.
-            if random.random() < self.q * (approx_cost / self.cr):
-                self._insert(key, emb)
+                # costo senza z: usa 2° vicino se esiste, altrimenti Cr
+                if len(topk) >= 2:
+                    _, sim2 = topk[1]
+                    ca_alt = self.ca(x, self.index.get_embedding(topk[1][0]))
+                    c_wo_z = min(self.cr, ca_alt)
+                else:
+                    c_wo_z = self.cr
 
-            self._on_hit(best_key)
-            self._notify('hit', best_key, best_sim)
+                # refresh prob = (C(x,S\{z}) - Ca(x,z)) / Cr  (clamp [0,1])
+                p_refresh = max(0.0, min(1.0, (c_wo_z - ca_xz) / self.cr))
+                if random.random() < p_refresh:
+                    # move-to-front
+                    if z in self.queue:
+                        self.queue.remove(z)
+                    self.queue.appendleft(z)
+
+                # con prob q*Ca/Cr recupero comunque x e lo inserisco (paper)
+                p_insert_x = max(0.0, min(1.0, self.q * (ca_xz / self.cr)))
+                if random.random() < p_insert_x:
+                    self._insert(key, x)
+
+                self._on_hit(z)
+                self._notify('hit', z, best_sim)
+                hit = True
+
+        if hit:
             return True
 
-        # Miss totale: inserisci x con probabilità q
+        # ---- miss path (Ca > Cr): inserisci con prob. q ----
         if random.random() < self.q:
-            self._insert(key, emb)
+            self._insert(key, x)
 
-        self._notify('miss', key, best_sim)
+        self._notify('miss', key, best_sim if best_sim is not None else None)
         return False
 
-    def _insert(self, key, emb):
+    def _insert(self, key: str, v: np.ndarray):
+        # LRU insert at head
         if key in self.queue:
             self.queue.remove(key)
         self.queue.appendleft(key)
-        self.index.add(key, emb)
-        self._notify('add', key)
+
+        self.index.add(key, v)
+        self._notify('add', key, None)
         self._on_add(key)
 
-        # Evict se superiamo la capacità
+        # Evict se oltre capacità
         if len(self.queue) > self.capacity:
-            evicted = self.queue.pop()
-            self.index.remove(evicted)
-            self._notify('evict', evicted)
-            self._on_evict(evicted)
+            victim = self.queue.pop()
+            self.index.remove(victim)
+            self._notify('evict', victim, None)
+            self._on_evict(victim)
 
+    # Hooks (observer)
     def _on_add(self, key: str): pass
     def _on_evict(self, key: str): pass
     def _on_hit(self, key: str): pass
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 from typing import Optional, Tuple, List

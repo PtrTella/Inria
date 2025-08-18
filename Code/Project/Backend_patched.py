@@ -40,6 +40,7 @@ class ISimilarityIndex(Protocol):
     def remove(self, key: str) -> None: ...
     def query(self, emb: np.ndarray, topk: int = 1) -> Tuple[Optional[str], float]: ...
     def get_embedding(self, key: str) -> Optional[np.ndarray]: ...
+    def query_topk(self, emb: np.ndarray, k: int) -> List[Tuple[str, float]]: ...
     @property
     def keys(self) -> List[str]: ...
 
@@ -75,6 +76,14 @@ class LinearIndex(ISimilarityIndex):
         """Returns the *normalized* embedding stored for `key` (float32, shape (dim,)), or None."""
         v = self._store.get(key)
         return None if v is None else v.copy()
+    
+    # LinearIndex.query_topk
+    def query_topk(self, emb, k):
+        if not self._store: return []
+        q = _l2norm(_ensure_f32(emb, self.dim))
+        sims = [(key, float(np.dot(q, v))) for key, v in self._store.items()]
+        sims.sort(key=lambda kv: kv[1], reverse=True)
+        return sims[:max(1, k)]
 
     @property
     def keys(self) -> List[str]:
@@ -135,6 +144,19 @@ class FAISSFlatIPIndex(ISimilarityIndex):
     def get_embedding(self, key: str) -> Optional[np.ndarray]:
         v = self._key_to_emb.get(key)
         return None if v is None else v.copy()
+    
+    # FAISSFlatIPIndex.query_topk
+    def query_topk(self, emb, k):
+        if not self._key_to_id: return []
+        q = _l2norm(_ensure_f32(emb, self.dim))
+        D, I = self._index.search(q.reshape(1, -1).astype(np.float32, copy=False), max(1, k))
+        out = []
+        for id_, sim in zip(I[0].tolist(), D[0].tolist()):
+            if id_ == -1: continue
+            key = self._id_to_key.get(int(id_))
+            if key is not None:
+                out.append((key, float(sim)))
+        return out
 
     @property
     def keys(self) -> List[str]:

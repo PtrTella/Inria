@@ -4,6 +4,13 @@ data/
 
 */__pycache__
 *.DS_Store
+results*/
 Code/dataset.parquet
 dataset.parquet
 Code/Project/__pycache__
+outputs/metrics_aggregated.csv
+outputs/metrics_with_cfg.csv
+outputs/summaries.csv
+outputs/figures/ad4598fa-48f6-4ef8-9de1-abc66f4dc60f_sim_hits_box.png
+outputs/figures/pareto_qualita_costo.png
+outputs/runs/ad4598fa-48f6-4ef8-9de1-abc66f4dc60f.parquet

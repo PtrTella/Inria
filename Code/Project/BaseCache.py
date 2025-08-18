@@ -12,7 +12,7 @@ class BaseSimilarityCache:
     that riceveranno eventi: 'hit', 'miss', 'add', 'evict'.
     """
     def __init__(
-        self, capacity: int, threshold: float, dim: int, backend: str = "flat_faiss", adaptive_thresh = False
+        self, capacity: int, threshold: float, dim: int, backend: str = "faiss_flat", adaptive_thresh = False
     ):
         self.capacity = capacity
         self.threshold = threshold

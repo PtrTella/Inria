@@ -3,6 +3,7 @@ import numpy as np
 import panel as pn
 import holoviews as hv
 from holoviews.streams import Pipe
+from sympy import im
 from BaseCache import CacheSimulator  # Il tuo modulo
 
 pn.extension('holoviews')
@@ -149,10 +150,11 @@ class CacheDashboard:
 
 if __name__ == "__main__":
     from CachePolicy import LRUCache, LFUCache, RNDLRUCache
-    from CacheAware import GreedyCache, OSACache
-    from CacheUnAware import DuelCache, QLRUDeltaCCache
+    from CacheAware import OSACache, GreedyCache
+    from CacheUnAware import QLRUDeltaCCache
+    from DuelCache_integrated import DuelCache
 
-    policies = [LRUCache, LFUCache, RNDLRUCache, GreedyCache, OSACache, DuelCache, QLRUDeltaCCache]
+    policies = [LRUCache, LFUCache, RNDLRUCache, GreedyCache, OSACache, DuelCache, QLRUDeltaCCache, DuelCache]
 
     from PromptDatasetManager import PromptDatasetManager
     manager = PromptDatasetManager()
