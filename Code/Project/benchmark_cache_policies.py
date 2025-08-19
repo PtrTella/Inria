@@ -1,6 +1,3 @@
-
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 Benchmark delle politiche di cache (nessuna UI).
 - Carica un dataset parquet con colonne: prompt, clip_emb, user_name, timestamp
@@ -8,16 +5,14 @@ Benchmark delle politiche di cache (nessuna UI).
 - Salva:
   * summary.csv con metriche per ogni run
   * histories/*.csv con la storia evento-per-evento (hit/miss/add/evict)
-  * grafici PNG in charts/
 Requisiti: numpy, pandas, matplotlib, pyarrow, (faiss/annoy opzionali).
 """
 
-import argparse, json, time, uuid, math, random
+import argparse, json, time, uuid, random
 from pathlib import Path
 from typing import Dict, List, Tuple
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
 
 # Import dei tuoi moduli locali
 from PromptDatasetManager import PromptDatasetManager
@@ -129,79 +124,6 @@ def policy_space(args, dim: int) -> List[Tuple[str, type, Dict]]:
 
     return runs
 
-# --------- Plot helpers (no seaborn, 1 plot per figura, no colori specifici) ---------
-
-def plot_best_hit_by_policy(summary_df: pd.DataFrame, outdir: Path) -> Path:
-    best = (summary_df.sort_values("hit_rate", ascending=False)
-                      .groupby("policy", as_index=False)
-                      .first())
-    fig = plt.figure()
-    plt.bar(best["policy"], best["hit_rate"])
-    plt.title("Miglior hit-rate per policy (su tutta la griglia)")
-    plt.ylabel("Hit-rate")
-    plt.xticks(rotation=25, ha="right")
-    p = outdir / "charts" / "best_hit_rate_by_policy.png"
-    ensure_dir(p.parent)
-    fig.tight_layout()
-    fig.savefig(p, dpi=150)
-    plt.close(fig)
-    return p
-
-def plot_hit_vs_capacity(summary_df: pd.DataFrame, outdir: Path) -> List[Path]:
-    paths = []
-    # Per ogni threshold, prendiamo per ciascuna policy la miglior combinazione sugli altri iperparametri
-    for th in sorted(summary_df["threshold"].unique()):
-        sub = summary_df[summary_df["threshold"] == th].copy()
-        # Scegli, per policy+capacity, il run con hit_rate max sugli altri parametri
-        pick = (sub.sort_values("hit_rate", ascending=False)
-                    .groupby(["policy","capacity"], as_index=False)
-                    .first())
-        # pivot per grafico
-        capacities = sorted(pick["capacity"].unique())
-        policies = sorted(pick["policy"].unique())
-        fig = plt.figure()
-        for pol in policies:
-            y = [float(pick[(pick["policy"]==pol)&(pick["capacity"]==c)]["hit_rate"].max()
-                      if ((pick["policy"]==pol)&(pick["capacity"]==c)).any() else np.nan) for c in capacities]
-            plt.plot(capacities, y, marker="o", label=pol)
-        plt.xlabel("Capacity")
-        plt.ylabel("Hit-rate (best per policy/capacity)")
-        plt.title(f"Hit-rate vs Capacity @ threshold={th}")
-        plt.legend()
-        p = outdir / "charts" / f"hit_rate_vs_capacity_th{th}.png"
-        ensure_dir(p.parent)
-        fig.tight_layout()
-        fig.savefig(p, dpi=150)
-        plt.close(fig)
-        paths.append(p)
-    return paths
-
-def plot_best_occupancy_curves(summary_df: pd.DataFrame, histories_dir: Path, outdir: Path) -> List[Path]:
-    # Per ogni policy, trova il run con miglior hit_rate e plotta l'occupancy nel tempo
-    paths = []
-    best = (summary_df.sort_values("hit_rate", ascending=False)
-                      .groupby("policy", as_index=False)
-                      .first())
-    for _, row in best.iterrows():
-        run_id = row["run_id"]
-        hist_path = histories_dir / f"{run_id}.csv"
-        if not hist_path.exists():
-            continue
-        df = pd.read_csv(hist_path)
-        # step fittizio = progressivo
-        df = df.reset_index().rename(columns={"index":"step"})
-        fig = plt.figure()
-        plt.plot(df["step"].to_numpy(), df["cache_occupancy"].to_numpy())
-        plt.xlabel("Step")
-        plt.ylabel("Occupancy")
-        plt.title(f"Occupancy nel tempo – best run ({row['policy']})")
-        p = outdir / "charts" / f"occupancy_{row['policy']}_{run_id}.png"
-        ensure_dir(p.parent)
-        fig.tight_layout()
-        fig.savefig(p, dpi=150)
-        plt.close(fig)
-        paths.append(p)
-    return paths
 
 # --------- Main ---------
 
@@ -245,8 +167,6 @@ def main():
     ensure_dir(outdir)
     histories_dir = outdir / "histories"
     ensure_dir(histories_dir)
-    charts_dir = outdir / "charts"
-    ensure_dir(charts_dir)
 
     # --- Caricamento dataset ---
     rng = random.Random(args.seed)
@@ -333,11 +253,6 @@ def main():
     summary_csv = outdir / "summary.csv"
     summary_df.to_csv(summary_csv, index=False)
 
-    # --- Grafici ---
-    chart1 = plot_best_hit_by_policy(summary_df, outdir)
-    chart_list2 = plot_hit_vs_capacity(summary_df, outdir)
-    chart_list3 = plot_best_occupancy_curves(summary_df, histories_dir, outdir)
-
     # --- Info finale ---
     manifest = {
         "created_at": now_tag(),
@@ -347,7 +262,6 @@ def main():
         "artifacts": {
             "summary_csv": str(summary_csv),
             "histories_dir": str(histories_dir),
-            "charts": [str(chart1)] + [str(p) for p in chart_list2] + [str(p) for p in chart_list3],
         },
         "args": vars(args),
     }
@@ -357,7 +271,6 @@ def main():
     print(f"[OK] Completato. Risultati in: {outdir}")
     print(f" - Summary: {summary_csv}")
     print(f" - Histories: {histories_dir}")
-    print(f" - Charts: {outdir/'charts'}")
 
 if __name__ == "__main__":
     main()
