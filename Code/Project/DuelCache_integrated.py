@@ -145,7 +145,11 @@ class DuelCache(BaseSimilarityCache):
             e_y = self.index.get_embedding(d.opponent_key)
             if e_y is None:
                 # Opponent evicted by some external action; cancel duel
-                self._notify('duel_cancel', d.candidate_key, d.opponent_key, 'opponent_missing')
+                self._notify('duel_cancel', {
+                    'candidate': d.candidate_key,
+                    'opponent': d.opponent_key,
+                    'reason': 'opponent_missing'
+                })
                 self._duels.pop(d.candidate_key, None)
                 continue
 
