@@ -98,8 +98,10 @@ def policy_space(args, dim: int) -> List[Tuple[str, type, Dict]]:
 
     # qLRU-ΔC (Neglia et al.)
     if "qLRUΔC" in args.policies:
+        print(f"Configurazione per qLRUΔC: capacities = {args.capacities}, thresholds = {[0.8]}, cr_values = {args.cr_values}, q_values = {args.q_values}")
         for C in args.capacities:
-            for T in args.thresholds:
+            #for T in args.thresholds:
+            for T in [0.8]:  # qLRUΔC usa solo threshold 0.8
                 for cr in args.cr_values:
                     for q in args.q_values:
                         pa = dict(base, capacity=int(C), threshold=float(T), cr=float(cr), q=float(q))
@@ -149,7 +151,7 @@ def main():
 
     # Parametri policy-specifici
     ap.add_argument("--ttl-values", nargs="+", type=int, default=[100, 500, 1000])
-    ap.add_argument("--cr-values", nargs="+", type=float, default=[0.2, 0.5, 1.0])
+    ap.add_argument("--cr_values", nargs="+", type=float, default=[0.2, 0.5, 1.0])
     ap.add_argument("--duel-beta", nargs="+", type=float, default=[0.6,0.75,0.9])
     ap.add_argument("--duel-delta", nargs="+", type=float, default=[0.02,0.05,0.1])
     ap.add_argument("--duel-tau", nargs="+", type=int, default=[100,200,400])
@@ -163,7 +165,7 @@ def main():
 
     args = ap.parse_args()
 
-    outdir = Path(args.outdir) if args.outdir else Path(f"results_{time.strftime('%Y%m%d_%H%M%S')}")
+    outdir = Path(args.outdir) if args.outdir else Path(f"Results/results_{time.strftime('%Y%m%d_%H%M%S')}")
     ensure_dir(outdir)
     histories_dir = outdir / "histories"
     ensure_dir(histories_dir)
