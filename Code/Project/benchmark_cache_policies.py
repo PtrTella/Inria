@@ -110,6 +110,23 @@ def policy_space(args, dim: int) -> List[Tuple[str, type, Dict]]:
                         pa = dict(base, capacity=int(C), threshold=float(T), cr=float(cr), q=float(q))
                         runs.append(("QLRUDeltaCCache", QLRUDeltaCCache, pa))
 
+
+    # Duel (λ-unaware, counters-based)
+    if "Duel" in args.policies:
+        for C in args.capacities:
+            for T in args.thresholds:
+                for beta in args.duel_beta:
+                    for delta in args.duel_delta:
+                        for tau in args.duel_tau:
+                            for kd in args.duel_k:
+                                for ma in args.duel_max_active:
+                                    for rintf in args.duel_rintf:
+                                        pa = dict(base, capacity=int(C), threshold=float(T),
+                                                  beta=float(beta), delta=float(delta), tau=int(tau),
+                                                  k_duel=int(kd), max_active_duels=int(ma),
+                                                  interference_radius=float(rintf))
+                                        runs.append(("DuelCache", DuelCache, pa))
+
     return runs
 
 # --------- Plot helpers (no seaborn, 1 plot per figura, no colori specifici) ---------
@@ -202,8 +219,8 @@ def main():
     ap.add_argument("--adaptive-factor", type=float, default=0.0, help="0=off; >0 adatta threshold con occupancy")
 
     ap.add_argument("--policies", nargs="+",
-                    default=["LRU","LFU","TTL","Greedy","qLRUΔC"],
-                    help="Scegli quali policy includere: LRU LFU TTL Greedy qLRUΔC")
+                    default=["LRU","LFU","qLRUΔC","Duel"],
+                    help="Scegli quali policy includere: LRU LFU TTL Greedy qLRUΔC Duel")
 
     ap.add_argument("--capacities", nargs="+", type=int, default=[50,100,200,500])
     ap.add_argument("--thresholds", nargs="+", type=float, default=[0.7, 0.8])
@@ -211,6 +228,12 @@ def main():
     # Parametri policy-specifici
     ap.add_argument("--ttl-values", nargs="+", type=int, default=[100, 500, 1000])
     ap.add_argument("--cr-values", nargs="+", type=float, default=[0.2, 0.5, 1.0])
+    ap.add_argument("--duel-beta", nargs="+", type=float, default=[0.6,0.75,0.9])
+    ap.add_argument("--duel-delta", nargs="+", type=float, default=[0.02,0.05,0.1])
+    ap.add_argument("--duel-tau", nargs="+", type=int, default=[100,200,400])
+    ap.add_argument("--duel-k", nargs="+", type=int, default=[4,8,16])
+    ap.add_argument("--duel-max-active", nargs="+", type=int, default=[8])
+    ap.add_argument("--duel-rintf", nargs="+", type=float, default=[0.03])
     ap.add_argument("--q-values", nargs="+", type=float, default=[0.1, 0.2, 0.4])
 
     ap.add_argument("--synthetic", action="store_true",
