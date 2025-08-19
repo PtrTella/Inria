@@ -129,9 +129,9 @@ def policy_space(args, dim: int) -> List[Tuple[str, type, Dict]]:
 
 def main():
     ap = argparse.ArgumentParser(description="Benchmark politiche di cache (no UI)")
-    ap.add_argument("--data", type=str, default=None, help="Parquet con colonne: prompt, clip_emb, user_name, timestamp")
+    ap.add_argument("--data", type=str, default="Data/normalized_embeddings.parquet", help="Parquet con colonne: prompt, clip_emb, user_name, timestamp")
     ap.add_argument("--outdir", type=str, default=None, help="Cartella risultati (default: results_<timestamp>)")
-    ap.add_argument("--max-rows", type=int, default=None, help="Carica al massimo N righe dal dataset")
+    ap.add_argument("--max-rows", type=int, default=400, help="Carica al massimo N righe dal dataset")
     ap.add_argument("--num-requests", type=int, default=20000, help="Numero di richieste da simulare")
     ap.add_argument("--trace", choices=["sequential","random"], default="sequential", help="Ordine richieste")
     ap.add_argument("--replace", action="store_true", help="Campionamento random con ripetizione")
@@ -226,9 +226,7 @@ def main():
             trace_indices=trace_idx,
         )
         # Salva storia del run
-        hist = sim.get_history(run_id)
-        hist_path = histories_dir / f"{run_id}.csv"
-        hist.to_csv(hist_path, index=False)
+        sim.export(histories_dir / f"{run_id}.csv", format="csv")
 
         # Riassunto
         meta = sim.get_summary(run_id)
@@ -238,6 +236,7 @@ def main():
             "policy": meta["policy"],
             "hit_rate": float(meta["hit_rate"]),
             "miss_rate": float(meta["miss_rate"]),
+            "avg_similarity": float(meta["avg_similarity"]),
             "duration_s": float(meta["duration"]),
             "capacity": pol_args.get("capacity", None),
             "threshold": pol_args.get("threshold", None),

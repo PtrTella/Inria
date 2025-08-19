@@ -130,11 +130,15 @@ class CacheSimulator:
 
     def get_summary(self, run_id):
         meta = self.runs[run_id]
+        events = self.histories[run_id]
+        sims = [e['sim'] for e in events if e['sim'] is not None]
+        avg_sim = np.mean(sims) if sims else 0.0
         return {
             'run_id': run_id,
             'policy': meta['policy'],
             'hit_rate': meta['hit'] / meta['total'] if meta['total'] > 0 else 0,
             'miss_rate': meta['miss'] / meta['total'] if meta['total'] > 0 else 0,
+            'avg_similarity': avg_sim,
             'duration': meta.get('duration', 0.0),
             'params': meta['params'],
         }
