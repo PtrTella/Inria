@@ -87,9 +87,9 @@ class TTLCache(BaseSimilarityCache):
 
 class RNDLRUCache(LRUCache):
     """Randomized LRU where threshold varies at each query."""
-    def __init__(self, capacity, threshold, dim, backend=True, min_threshold=0.5, max_threshold=1.0):
+    def __init__(self, capacity, threshold, dim, backend=True, min_threshold=0.5, max_threshold=1.0, adaptive_thresh=False):
 
-        super().__init__(capacity, threshold, dim, backend)
+        super().__init__(capacity, threshold, dim, backend, adaptive_thresh)
         self.min_threshold = min_threshold
         self.max_threshold = max_threshold
 
