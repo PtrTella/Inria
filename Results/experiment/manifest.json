@@ -1,0 +1,77 @@
+{
+  "created_at": "20250819_164058",
+  "num_runs": 156,
+  "num_requests": 10000,
+  "outdir": "Results/results_20250819_163724",
+  "artifacts": {
+    "summary_csv": "Results/results_20250819_163724/summary.csv",
+    "histories_dir": "Results/results_20250819_163724/histories"
+  },
+  "args": {
+    "data": "Data/normalized_embeddings.parquet",
+    "outdir": null,
+    "max_rows": 10000,
+    "num_requests": 10000,
+    "trace": "sequential",
+    "replace": false,
+    "seed": 42,
+    "backend": "faiss_flat",
+    "adaptive_factor": 0.0,
+    "policies": [
+      "LRU",
+      "LFU",
+      "RND",
+      "qLRUΔC",
+      "Duel"
+    ],
+    "capacities": [
+      500.0,
+      1000.0,
+      2000.0,
+      3000.0
+    ],
+    "thresholds": [
+      0.6,
+      0.7,
+      0.8
+    ],
+    "ttl_values": [
+      100,
+      200,
+      500,
+      1000
+    ],
+    "cr_values": [
+      0.2,
+      0.5
+    ],
+    "duel_beta": [
+      0.6,
+      0.75
+    ],
+    "duel_delta": [
+      0.02,
+      0.05
+    ],
+    "duel_tau": [
+      100,
+      200
+    ],
+    "duel_k": [
+      4,
+      8
+    ],
+    "duel_max_active": [
+      8
+    ],
+    "duel_rintf": [
+      0.03
+    ],
+    "q_values": [
+      0.1,
+      0.2,
+      0.4
+    ],
+    "synthetic": false
+  }
+}

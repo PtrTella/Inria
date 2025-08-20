@@ -1,0 +1,2 @@
+run_id,policy,hit_rate,miss_rate,avg_similarity,duration_s,capacity,threshold,ttl,cr,q,backend,adaptive_factor,params_dict,param_str,requests,quality
+QLRUDeltaCCache_977e5599,QLRUDeltaCCache,0.9999,0.0001,0.6756359244754451,0.6412820816040039,2000,0.8,,0.5,0.2,faiss_flat,0.0,{},,,0.6756359244754451
