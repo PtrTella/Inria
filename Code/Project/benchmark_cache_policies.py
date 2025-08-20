@@ -17,12 +17,13 @@ import pandas as pd
 # Import dei tuoi moduli locali
 from PromptDatasetManager import PromptDatasetManager
 from BaseCache import CacheSimulator
-from CachePolicy import LRUCache, LFUCache, TTLCache
+from CachePolicy import LRUCache, LFUCache, RNDLRUCache, TTLCache
 from CacheAware import GreedyCache
 from CacheUnAware import QLRUDeltaCCache
 from DuelCache_integrated import DuelCache
 
 # --------- Utility ---------
+TOTAL_REQUESTS = 10000  # Numero di richieste da simulare
 
 def ensure_dir(p: Path) -> None:
     p.mkdir(parents=True, exist_ok=True)
@@ -77,6 +78,8 @@ def policy_space(args, dim: int) -> List[Tuple[str, type, Dict]]:
                 runs.append(("LRUCache", LRUCache, dict(pa)))
             if "LFU" in args.policies:
                 runs.append(("LFUCache", LFUCache, dict(pa)))
+            if "RND" in args.policies:
+                runs.append(("RNDLRUCache", RNDLRUCache, dict(pa)))
 
     # TTL
     if "TTL" in args.policies:
@@ -99,9 +102,8 @@ def policy_space(args, dim: int) -> List[Tuple[str, type, Dict]]:
     # qLRU-ΔC (Neglia et al.)
     if "qLRUΔC" in args.policies:
         print(f"Configurazione per qLRUΔC: capacities = {args.capacities}, thresholds = {[0.8]}, cr_values = {args.cr_values}, q_values = {args.q_values}")
-        for C in args.capacities:
-            #for T in args.thresholds:
-            for T in [0.8]:  # qLRUΔC usa solo threshold 0.8
+        for C in [TOTAL_REQUESTS*0.1, TOTAL_REQUESTS*0.2]:
+            for T in [0.7, 0.8]:
                 for cr in args.cr_values:
                     for q in args.q_values:
                         pa = dict(base, capacity=int(C), threshold=float(T), cr=float(cr), q=float(q))
@@ -110,7 +112,8 @@ def policy_space(args, dim: int) -> List[Tuple[str, type, Dict]]:
 
     # Duel (λ-unaware, counters-based)
     if "Duel" in args.policies:
-        for C in args.capacities:
+        print(f"Configurazione per DuelCache: capacities = {args.capacities}, thresholds = {args.thresholds}, duel_beta = {args.duel_beta}, duel_delta = {args.duel_delta}, duel_tau = {args.duel_tau}, duel_k = {args.duel_k}, duel_max_active = {args.duel_max_active}, duel_rintf = {args.duel_rintf}")
+        for C in [TOTAL_REQUESTS*0.1, TOTAL_REQUESTS*0.2]:
             for T in args.thresholds:
                 for beta in args.duel_beta:
                     for delta in args.duel_delta:
@@ -129,12 +132,13 @@ def policy_space(args, dim: int) -> List[Tuple[str, type, Dict]]:
 
 # --------- Main ---------
 
+
 def main():
     ap = argparse.ArgumentParser(description="Benchmark politiche di cache (no UI)")
     ap.add_argument("--data", type=str, default="Data/normalized_embeddings.parquet", help="Parquet con colonne: prompt, clip_emb, user_name, timestamp")
     ap.add_argument("--outdir", type=str, default=None, help="Cartella risultati (default: results_<timestamp>)")
-    ap.add_argument("--max-rows", type=int, default=400, help="Carica al massimo N righe dal dataset")
-    ap.add_argument("--num-requests", type=int, default=20000, help="Numero di richieste da simulare")
+    ap.add_argument("--max-rows", type=int, default=TOTAL_REQUESTS, help="Carica al massimo N righe dal dataset")
+    ap.add_argument("--num-requests", type=int, default=TOTAL_REQUESTS, help="Numero di richieste da simulare")
     ap.add_argument("--trace", choices=["sequential","random"], default="sequential", help="Ordine richieste")
     ap.add_argument("--replace", action="store_true", help="Campionamento random con ripetizione")
     ap.add_argument("--seed", type=int, default=42, help="Seed PRNG per traccia random")
@@ -143,19 +147,19 @@ def main():
     ap.add_argument("--adaptive-factor", type=float, default=0.0, help="0=off; >0 adatta threshold con occupancy")
 
     ap.add_argument("--policies", nargs="+",
-                    default=["LRU","LFU","qLRUΔC","Duel"],
+                    default=["LRU","LFU","RND","qLRUΔC","Duel"],
                     help="Scegli quali policy includere: LRU LFU TTL Greedy qLRUΔC Duel")
 
-    ap.add_argument("--capacities", nargs="+", type=int, default=[50,100,200,500])
-    ap.add_argument("--thresholds", nargs="+", type=float, default=[0.7, 0.8])
+    ap.add_argument("--capacities", nargs="+", type=int, default=[TOTAL_REQUESTS*0.05, TOTAL_REQUESTS*0.1, TOTAL_REQUESTS*0.2, TOTAL_REQUESTS*0.3])
+    ap.add_argument("--thresholds", nargs="+", type=float, default=[0.6, 0.7, 0.8])
 
     # Parametri policy-specifici
-    ap.add_argument("--ttl-values", nargs="+", type=int, default=[100, 500, 1000])
-    ap.add_argument("--cr_values", nargs="+", type=float, default=[0.2, 0.5, 1.0])
-    ap.add_argument("--duel-beta", nargs="+", type=float, default=[0.6,0.75,0.9])
-    ap.add_argument("--duel-delta", nargs="+", type=float, default=[0.02,0.05,0.1])
-    ap.add_argument("--duel-tau", nargs="+", type=int, default=[100,200,400])
-    ap.add_argument("--duel-k", nargs="+", type=int, default=[4,8,16])
+    ap.add_argument("--ttl-values", nargs="+", type=int, default=[100, 200, 500, 1000])
+    ap.add_argument("--cr-values", nargs="+", type=float, default=[0.2, 0.5])
+    ap.add_argument("--duel-beta", nargs="+", type=float, default=[0.6,0.75])
+    ap.add_argument("--duel-delta", nargs="+", type=float, default=[0.02,0.05])
+    ap.add_argument("--duel-tau", nargs="+", type=int, default=[100,200])
+    ap.add_argument("--duel-k", nargs="+", type=int, default=[4,8])
     ap.add_argument("--duel-max-active", nargs="+", type=int, default=[8])
     ap.add_argument("--duel-rintf", nargs="+", type=float, default=[0.03])
     ap.add_argument("--q-values", nargs="+", type=float, default=[0.1, 0.2, 0.4])
@@ -190,6 +194,7 @@ def main():
             raise SystemExit("--data è obbligatorio (oppure usa --synthetic)")
         mgr = PromptDatasetManager()
         mgr.load_local_metadata(args.data, max_rows=args.max_rows, load_embeddings=True)
+        print(f"Caricato dataset: {mgr.df.shape[0]} righe, {mgr.df.shape[1]} embeddings")
         embs = mgr.emb_matrix.astype(np.float32, copy=False)
         dim = infer_dim(embs)
         # Chiavi univoche (evitiamo conflitti sulla stessa stringa prompt)
