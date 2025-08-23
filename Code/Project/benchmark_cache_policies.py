@@ -22,7 +22,7 @@ from CachePolicy import LRUCache, LFUCache
 from CacheUnAware import QLRUDeltaCCache, DuelCache
 
 # --------- Utility ---------
-TOTAL_REQUESTS = 200  # Numero di richieste da simulare
+TOTAL_REQUESTS = 20000  # Numero di richieste da simulare
 
 def ensure_dir(p: Path) -> None:
     p.mkdir(parents=True, exist_ok=True)
