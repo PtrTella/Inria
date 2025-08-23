@@ -8,6 +8,7 @@ Benchmark delle politiche di cache (nessuna UI).
 Requisiti: numpy, pandas, matplotlib, pyarrow, (faiss/annoy opzionali).
 """
 
+import time
 import argparse, json, time, uuid, random
 from pathlib import Path
 from typing import Dict, List, Tuple
@@ -17,13 +18,11 @@ import pandas as pd
 # Import dei tuoi moduli locali
 from PromptDatasetManager import PromptDatasetManager
 from BaseCache import CacheSimulator
-from CachePolicy import LRUCache, LFUCache, RNDLRUCache, TTLCache
-from CacheAware import GreedyCache
-from CacheUnAware import QLRUDeltaCCache
-from DuelCache_integrated import DuelCache
+from CachePolicy import LRUCache, LFUCache
+from CacheUnAware import QLRUDeltaCCache, DuelCache
 
 # --------- Utility ---------
-TOTAL_REQUESTS = 10000  # Numero di richieste da simulare
+TOTAL_REQUESTS = 200  # Numero di richieste da simulare
 
 def ensure_dir(p: Path) -> None:
     p.mkdir(parents=True, exist_ok=True)
@@ -78,53 +77,30 @@ def policy_space(args, dim: int) -> List[Tuple[str, type, Dict]]:
                 runs.append(("LRUCache", LRUCache, dict(pa)))
             if "LFU" in args.policies:
                 runs.append(("LFUCache", LFUCache, dict(pa)))
-            if "RND" in args.policies:
-                runs.append(("RNDLRUCache", RNDLRUCache, dict(pa)))
-
-    # TTL
-    if "TTL" in args.policies:
-        for C in args.capacities:
-            for T in args.thresholds:
-                for ttl in args.ttl_values:
-                    pa = dict(base, capacity=int(C), threshold=float(T), ttl=int(ttl))
-                    runs.append(("TTLCache", TTLCache, pa))
-
-    # Greedy λ-aware (Neglia et al.)
-    if "Greedy" in args.policies:
-        # Frequenze uniformi come default; se hai trace keys, puoi ricalcolarle.
-        # Nota: Greedy supporta sample_size e rng_seed se definiti nella tua classe.
-        for C in args.capacities:
-            for T in args.thresholds:
-                for cr in args.cr_values:
-                    pa = dict(base, capacity=int(C), threshold=float(T), cr=float(cr))
-                    runs.append(("GreedyCache", GreedyCache, pa))
 
     # qLRU-ΔC (Neglia et al.)
     if "qLRUΔC" in args.policies:
-        print(f"Configurazione per qLRUΔC: capacities = {args.capacities}, thresholds = {[0.8]}, cr_values = {args.cr_values}, q_values = {args.q_values}")
-        for C in [TOTAL_REQUESTS*0.1, TOTAL_REQUESTS*0.2]:
-            for T in [0.7, 0.8]:
-                for cr in args.cr_values:
-                    for q in args.q_values:
-                        pa = dict(base, capacity=int(C), threshold=float(T), cr=float(cr), q=float(q))
-                        runs.append(("QLRUDeltaCCache", QLRUDeltaCCache, pa))
+        print(f"Configurazione per qLRUΔC: capacities = {args.capacities}, thresholds = {args.thresholds}, q_values = {args.q_values}")
+        for C in args.capacities:
+            for T in args.thresholds:
+                for q in args.q_values:
+                    pa = dict(base, capacity=int(C), threshold=float(T), q=float(q))
+                    runs.append(("QLRUDeltaCCache", QLRUDeltaCCache, pa))
 
 
     # Duel (λ-unaware, counters-based)
     if "Duel" in args.policies:
         print(f"Configurazione per DuelCache: capacities = {args.capacities}, thresholds = {args.thresholds}, duel_beta = {args.duel_beta}, duel_delta = {args.duel_delta}, duel_tau = {args.duel_tau}, duel_k = {args.duel_k}, duel_max_active = {args.duel_max_active}, duel_rintf = {args.duel_rintf}")
-        for C in [TOTAL_REQUESTS*0.1, TOTAL_REQUESTS*0.2]:
+        for C in args.capacities:
             for T in args.thresholds:
                 for beta in args.duel_beta:
                     for delta in args.duel_delta:
                         for tau in args.duel_tau:
                             for kd in args.duel_k:
                                 for ma in args.duel_max_active:
-                                    for rintf in args.duel_rintf:
                                         pa = dict(base, capacity=int(C), threshold=float(T),
                                                   beta=float(beta), delta=float(delta), tau=int(tau),
-                                                  k_duel=int(kd), max_active_duels=int(ma),
-                                                  interference_radius=float(rintf))
+                                                  k_duel=int(kd), max_active_duels=int(ma))
                                         runs.append(("DuelCache", DuelCache, pa))
 
     return runs
@@ -147,7 +123,7 @@ def main():
     ap.add_argument("--adaptive-factor", type=float, default=0.0, help="0=off; >0 adatta threshold con occupancy")
 
     ap.add_argument("--policies", nargs="+",
-                    default=["LRU","LFU","RND","qLRUΔC","Duel"],
+                    default=["LRU","LFU","qLRUΔC","Duel"],
                     help="Scegli quali policy includere: LRU LFU TTL Greedy qLRUΔC Duel")
 
     ap.add_argument("--capacities", nargs="+", type=int, default=[TOTAL_REQUESTS*0.05, TOTAL_REQUESTS*0.1, TOTAL_REQUESTS*0.2, TOTAL_REQUESTS*0.3])
@@ -159,7 +135,7 @@ def main():
     ap.add_argument("--duel-beta", nargs="+", type=float, default=[0.6,0.75])
     ap.add_argument("--duel-delta", nargs="+", type=float, default=[0.02,0.05])
     ap.add_argument("--duel-tau", nargs="+", type=int, default=[100,200])
-    ap.add_argument("--duel-k", nargs="+", type=int, default=[4,8])
+    ap.add_argument("--duel-k", nargs="+", type=int, default=[8])
     ap.add_argument("--duel-max-active", nargs="+", type=int, default=[8])
     ap.add_argument("--duel-rintf", nargs="+", type=float, default=[0.03])
     ap.add_argument("--q-values", nargs="+", type=float, default=[0.1, 0.2, 0.4])
@@ -201,6 +177,7 @@ def main():
         keys = build_keys(len(embs), base="row")
         # trace: sequenziale temporale oppure random
         if args.trace == "sequential" and hasattr(mgr, "time_sorted_idx"):
+            print("Usando sequenza temporale ordinata per trace")
             base_idx = mgr.time_sorted_idx.astype(np.int64)
             if args.num_requests < len(base_idx):
                 trace_idx = base_idx[:args.num_requests]
@@ -245,13 +222,15 @@ def main():
             "miss_rate": float(meta["miss_rate"]),
             "avg_similarity": float(meta["avg_similarity"]),
             "duration_s": float(meta["duration"]),
+            "C_A": float(meta["C_A"]),
             "capacity": pol_args.get("capacity", None),
             "threshold": pol_args.get("threshold", None),
-            "ttl": pol_args.get("ttl", None),
-            "cr": pol_args.get("cr", None),
             "q": pol_args.get("q", None),
-            "backend": pol_args.get("backend", None),
-            "adaptive_factor": pol_args.get("adaptive_thresh", None),
+            "beta": pol_args.get("beta", None),
+            "delta": pol_args.get("delta", None),
+            "tau": pol_args.get("tau", None),
+            "k_duel": pol_args.get("k_duel", None),
+            "max_active_duels": pol_args.get("max_active_duels", None),
         }
         summaries.append(row)
 
