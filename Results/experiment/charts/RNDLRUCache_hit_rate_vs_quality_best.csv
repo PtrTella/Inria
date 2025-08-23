@@ -1,2 +1,0 @@
-run_id,policy,hit_rate,miss_rate,avg_similarity,duration_s,capacity,threshold,ttl,cr,q,backend,adaptive_factor,params_dict,requests,quality
-RNDLRUCache_02749c19,RNDLRUCache,0.6138,0.3862,0.8015871415928006,1.3016698360443115,3000,0.8,,,,faiss_flat,0.0,{},,0.8015871415928006
