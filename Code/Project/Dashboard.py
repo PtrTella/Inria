@@ -151,10 +151,9 @@ class CacheDashboard:
 if __name__ == "__main__":
     from CachePolicy import LRUCache, LFUCache, RNDLRUCache
     from CacheAware import OSACache, GreedyCache
-    from CacheUnAware import QLRUDeltaCCache
-    from DuelCache_integrated import DuelCache
+    from CacheUnAware import QLRUDeltaCCache, DuelCache
 
-    policies = [LRUCache, LFUCache, RNDLRUCache, GreedyCache, OSACache, DuelCache, QLRUDeltaCCache, DuelCache]
+    policies = [LRUCache, LFUCache, RNDLRUCache, GreedyCache, OSACache, QLRUDeltaCCache, DuelCache]
 
     from PromptDatasetManager import PromptDatasetManager
     manager = PromptDatasetManager()
