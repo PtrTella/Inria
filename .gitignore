@@ -4,7 +4,7 @@ data/
 
 */__pycache__
 *.DS_Store
-results*/
+results_*/
 Code/dataset.parquet
 dataset.parquet
 Code/Project/__pycache__
