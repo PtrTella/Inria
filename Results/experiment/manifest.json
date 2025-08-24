@@ -1,0 +1,75 @@
+{
+  "created_at": "20250824_185838",
+  "num_runs": 156,
+  "num_requests": 20000,
+  "outdir": "Results/results_20250824_184601",
+  "artifacts": {
+    "summary_csv": "Results/results_20250824_184601/summary.csv",
+    "histories_dir": "Results/results_20250824_184601/histories"
+  },
+  "args": {
+    "data": "Data/normalized_embeddings.parquet",
+    "outdir": null,
+    "max_rows": 20000,
+    "num_requests": 20000,
+    "trace": "sequential",
+    "replace": false,
+    "seed": 42,
+    "backend": "faiss_flat",
+    "adaptive_factor": 0.0,
+    "policies": [
+      "LRU",
+      "LFU",
+      "qLRUΔC",
+      "Duel"
+    ],
+    "capacities": [
+      20.0,
+      200.0,
+      1000.0,
+      2000.0
+    ],
+    "thresholds": [
+      0.65,
+      0.75,
+      0.85
+    ],
+    "ttl_values": [
+      100,
+      200,
+      500,
+      1000
+    ],
+    "cr_values": [
+      0.2,
+      0.5
+    ],
+    "duel_beta": [
+      0.6,
+      0.75
+    ],
+    "duel_delta": [
+      0.02,
+      0.05
+    ],
+    "duel_tau": [
+      100,
+      200
+    ],
+    "duel_k": [
+      8
+    ],
+    "duel_max_active": [
+      8
+    ],
+    "duel_rintf": [
+      0.03
+    ],
+    "q_values": [
+      0.1,
+      0.2,
+      0.4
+    ],
+    "synthetic": false
+  }
+}
