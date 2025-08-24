@@ -417,7 +417,7 @@ def main():
 
 
 if __name__ == "__main__":
-    bench_dir = "/Users/tella/Workspace/Inria/Results/results_20250823_212138"
+    bench_dir = "/Users/tella/Workspace/Inria/Results/experiment"
     # Read manifest json and run the plot for each capacity
     with open(f"{bench_dir}/manifest.json") as f:
         manifest = json.load(f)

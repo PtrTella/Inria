@@ -125,8 +125,7 @@ def main():
     ap.add_argument("--policies", nargs="+",
                     default=["LRU","LFU","qLRUΔC","Duel"],
                     help="Scegli quali policy includere: LRU LFU TTL Greedy qLRUΔC Duel")
-
-    ap.add_argument("--capacities", nargs="+", type=int, default=[TOTAL_REQUESTS*0.05, TOTAL_REQUESTS*0.1, TOTAL_REQUESTS*0.2, TOTAL_REQUESTS*0.3])
+    ap.add_argument("--capacities", nargs="+", type=int, default=[TOTAL_REQUESTS*0.1/100, TOTAL_REQUESTS*1/100, TOTAL_REQUESTS*5/100, TOTAL_REQUESTS*10/100],)
     ap.add_argument("--thresholds", nargs="+", type=float, default=[0.6, 0.7, 0.8])
 
     # Parametri policy-specifici
