@@ -256,7 +256,7 @@ def plot_for_threshold(
     best_iloc = _choose_best(sub, method=best_rule)
 
     # Plot
-    fig, ax = plt.subplots(figsize=(8, 6))
+    fig, ax = plt.subplots()
 
     for i, row in sub.iterrows():
         x = float(row["avg_similarity"])
@@ -285,9 +285,9 @@ def plot_for_threshold(
         # Annotazione SOLO per la best
         if annotate_best and is_best:
             ax.annotate(
-                pol,
+                f"{pol}\n(q:{x:.3f}, hr:{y:.3f})",
                 (x, y),
-                xytext=(8, 10),
+                xytext=(-110, -10),
                 textcoords="offset points",
                 fontsize=9,
                 fontweight="bold",
@@ -404,7 +404,7 @@ def main():
 
 
 if __name__ == "__main__":
-    bench_dir = "/Users/tella/Workspace/Inria/Results/results_20250823_203817"
+    bench_dir = "/Users/tella/Workspace/Inria/Results/results_20250823_212138"
     # Read manifest json and run the plot for each capacity
     with open(f"{bench_dir}/manifest.json") as f:
         manifest = json.load(f)
@@ -414,7 +414,7 @@ if __name__ == "__main__":
     print(capacities)
     for capacity in capacities:
         plot_all_thresholds(
-            bench_dir="/Users/tella/Workspace/Inria/Results/results_20250823_203817",
+            bench_dir=bench_dir,
             capacity=capacity,                          # stessa capacity dei run (intero o float, vedi note)
             thresholds=thresholds,                       # oppure [0.6, 0.7, 0.8]
             gpu_name="RTX 4090",                   # opzionale: nome GPU mostrato in legenda
