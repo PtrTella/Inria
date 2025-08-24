@@ -1,7 +1,7 @@
 import time
 import numpy as np
 import pandas as pd
-from Code.Project.Backend import create_similarity_index
+from Backend import create_similarity_index
 from typing import Any, Callable, List, Optional, Type
 
 
