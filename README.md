@@ -1,39 +1,71 @@
-# SimCache: Similarity-Based Caching for Vector Embeddings
+# 🚀 SimCache: Similarity-Based Caching
 
-SimCache is a Python framework for implementing and evaluating similarity-based caches. Unlike traditional caches that require exact key matches, SimCache uses vector embeddings and similarity metrics to serve "near-misses" as hits, optimizing performance for AI and retrieval workflows.
+SimCache è un framework Python professionale per l'implementazione e la valutazione di **cache basate sulla similarità vettoriale**. A differenza delle cache tradizionali (LRU, FIFO) che richiedono chiavi esatte, SimCache usa gli *embedding* per servire "near-misses" come hit, ottimizzando drasticamente le performance in workflow di AI e Retrieval.
 
 ---
 
-## 🚀 Come Iniziare
+## 🛠️ Come Iniziare
 
-Per eseguire il progetto, usa l'entry point unificato `main.py` dalla cartella principale:
+Per eseguire il progetto, usa l'interfaccia unificata `main.py` dalla cartella principale:
 
-1.  **Dashboard Interattiva**:
-    ```bash
-    python3 main.py dashboard
-    ```
-2.  **Benchmark (Linea di Comando)**:
-    ```bash
-    python3 main.py benchmark --policies LRU LFU --num-requests 500
-    ```
+```bash
+python3 main.py
+```
+Dal menu potrai scegliere tra:
+- **Dashboard**: Visualizzazione interattiva nel browser (Panel/Holoviews).
+- **Benchmark**: Test di performance massivi via terminale.
+
+---
+
+## 🏗️ Architettura del Sistema
+
+Il sistema è progettato per essere modulare e scalabile, separando la logica di ricerca vettoriale dalle politiche di gestione della cache.
+
+```mermaid
+graph TD
+    A[Client Query] --> B[Cache Simulator / Wrapper]
+    B --> C[Cache Policy]
+    C --> D[Similarity Index]
+    D --> E[Faiss / Annoy / Linear]
+    
+    subgraph "Logic Layer"
+        C
+    end
+    
+    subgraph "Storage Layer"
+        D
+        E
+    end
+```
+
+### Componenti Core
+- **`src/simcache/`**: Il "cuore" del progetto (Package Python).
+- **Similarity Index (`Backend.py`)**: Gestisce lo storage dei vettori (Faiss, Annoy, ecc.).
+- **Cache Policies (`CachePolicy.py`, `CacheAware.py`)**: Definisce come gestire hit, miss ed evacuazioni.
+- **Simulator (`BaseCache.py`)**: Strumento per misurare hit-rate e costi di servizio su diverse tracce di query.
 
 ---
 
 ## 📂 Struttura del Progetto
 
-- `main.py`: Punto di ingresso unico per avviare il progetto.
-- `src/simcache/`: Il "cuore" del progetto (Package Python).
-- `notebooks/`: Notebook organizzati per Ricerca ed Hub di Valutazione.
-- `docs/`: Documentazione tecnica e schemi architetturali.
-
-## 🛠️ Caratteristiche Principali
-
-- **Multiple Backends**: Supporto per Faiss (Flat, IVF, HNSW), Annoy, e Linear index.
-- **Politiche Flessibili**: LRU, LFU, TTL, Greedy, OSA, Duel e altro.
-- **Simulatore Integrato**: Per misurare Hit Rate e costi di servizio.
+```text
+.
+├── main.py                 # Entry point unificato (Interattivo)
+├── src/simcache/           # CORE: Motore di Similarity Caching
+│   ├── Backend.py          # Implementazioni indici vettoriali
+│   ├── BaseCache.py        # Framework di base e Simulatore
+│   ├── CacheAware.py       # Politiche λ-aware (Greedy/OSA)
+│   ├── CachePolicy.py      # Politiche standard (LRU/LFU/TTL)
+│   └── ...
+├── notebooks/              # RESEARCH: Evaluation e Ricerca
+│   ├── eval/               # Benchmark e analisi risultati
+│   └── research/           # Note e test sperimentali
+├── scripts/                # TOOLS: Script di utility e plotting
+└── data/                   # DATA: Embedding e dataset (es. .parquet)
+```
 
 ## 📝 Note per lo Sviluppo
-Tutti i file all'interno di `src/simcache/` sono moduli di un pacchetto. Per utilizzarli in nuovi script, assicurati di aggiungere `src` al tuo `PYTHONPATH` o usa `main.py` come base.
+Tutti i moduli nella cartella `src/simcache/` sono progettati per essere importabili come pacchetto. Se crei nuovi script nella radice, usa `import simcache`. Se lavori nei notebook, la configurazione del percorso è automatizzata nelle celle iniziali.
 
 ---
-*Progetto sviluppato per la ricerca sulla Similarity Caching.*
+*Progetto sviluppato per la ricerca avanzata sulla Similarity Caching.*
