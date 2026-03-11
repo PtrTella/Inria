@@ -1,16 +1,24 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
 .venv/
-.venv3.11/
-data/
+.venv*/
+build/
+dist/
+*.egg-info/
 
-*/__pycache__
-*.DS_Store
+# Data and Results
+data/
+Results/
 results_*/
-Code/dataset.parquet
-dataset.parquet
-Code/Project/__pycache__
-outputs/metrics_aggregated.csv
-outputs/metrics_with_cfg.csv
-outputs/summaries.csv
-outputs/figures/ad4598fa-48f6-4ef8-9de1-abc66f4dc60f_sim_hits_box.png
-outputs/figures/pareto_qualita_costo.png
-outputs/runs/ad4598fa-48f6-4ef8-9de1-abc66f4dc60f.parquet
+outputs/
+*.parquet
+
+# IDE
+.vscode/
+.idea/
+*.DS_Store
+
+# Project Specific
+Code/  # Legacy directory
